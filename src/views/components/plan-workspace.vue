@@ -1,0 +1,526 @@
+<template>
+  <div class="pmis-plan-workspace art-page-view business-workspace-page art-full-height">
+    <BusinessWorkspaceHeader
+      :eyebrow="kind === 'inspection' ? 'INSPECTION GOVERNANCE' : 'PATROL GOVERNANCE'"
+      :title="`${kindLabel}方案`"
+      :description="description"
+      :icon="kind === 'inspection' ? 'ri:calendar-todo-line' : 'ri:route-line'"
+      :tags="[
+        { label: '设备主档联动', type: 'primary' },
+        { label: '任务自动生成', type: 'success' },
+        { label: '租户隔离', type: 'info' }
+      ]"
+      :metrics="metrics"
+    >
+      <template #actions>
+        <BusinessTableWorkspaceActions :table="tableRef" />
+      </template>
+    </BusinessWorkspaceHeader>
+
+    <ArtTableQuery
+      ref="tableRef"
+      v-model="searchModel"
+      :api-fn="fetchData"
+      :columns-factory="columnsFactory"
+      :search-items="searchItems"
+      :header-actions="headerActions"
+      header-actions-placement="workspace"
+      :excel-columns="excelColumns"
+      :search-bar-props="{ span: 8, labelWidth: 72, showExpand: false, isExpand: true }"
+      :table-props="{ rowKey: 'id', tableLayout: 'fixed' }"
+      :empty-config="{
+        title: `暂无${kindLabel}方案`,
+        description: `点击新增方案，配置适用设备、执行频次与${kindLabel}项目。`
+      }"
+      focusable
+      show-focus-mode
+    />
+
+    <PmisPlanDialog ref="dialogRef" @success="refresh" />
+    <ArtDrawer ref="drawerRef" :title="`${kindLabel}方案详情`" size="lg">
+      <template v-if="detailRow">
+        <ArtSectionCard title="方案摘要" subtitle="执行节奏与责任范围">
+          <ArtDescriptions :columns="2" :data="detailRow" :items="detailDescriptions" />
+        </ArtSectionCard>
+        <ArtSectionCard
+          title="检查项目"
+          :subtitle="`共 ${detailRow.items.length} 项，按现场执行顺序展示`"
+          :empty="detailRow.items.length === 0"
+          empty-description="该方案尚未配置检查项目。"
+        >
+          <ol class="pmis-plan-workspace__item-list">
+            <li v-for="item in detailRow.items" :key="item.id || item.sort">
+              <span>{{ String(item.sort / 10).padStart(2, '0') }}</span>
+              <div
+                ><strong>{{ item.itemName }}</strong
+                ><small>{{ item.requirement }}</small></div
+              >
+              <ElTag v-if="item.requirePhoto" size="small" type="warning" effect="plain"
+                >需图片</ElTag
+              >
+            </li>
+          </ol>
+        </ArtSectionCard>
+      </template>
+    </ArtDrawer>
+  </div>
+</template>
+
+<script setup lang="tsx">
+  import dayjs from 'dayjs'
+  import ArtButtonMore, {
+    type ButtonMoreItem
+  } from '@/components/core/forms/art-button-more/index.vue'
+  import ArtButtonTable from '@/components/core/forms/art-button-table/index.vue'
+  import ArtDescriptions from '@/components/core/base/art-descriptions/index.vue'
+  import ArtDrawer from '@/components/core/drawers/art-drawer/index.vue'
+  import type { ArtDrawerExpose } from '@/components/core/drawers/art-drawer/types'
+  import ArtSectionCard from '@/components/core/surfaces/art-section-card/index.vue'
+  import BusinessWorkspaceHeader, {
+    type BusinessWorkspaceMetric
+  } from '@/components/business/business-workspace-header/index.vue'
+  import BusinessTableWorkspaceActions from '@/components/business/business-table-workspace-actions/index.vue'
+  import type { SearchFormItem } from '@/components/core/forms/art-search-bar/index.vue'
+  import type {
+    ArtTableQueryExcelColumn,
+    ArtTableQueryExpose,
+    ArtTableQueryHeaderAction,
+    ArtTableQueryHeaderActionContext
+  } from '@/components/core/tables/art-table-query/index.vue'
+  import type { ColumnOption } from '@/types'
+  import { useArtFeedback } from '@/hooks/core/useArtFeedback'
+  import { useTenantScopeStore } from '@/store/modules/tenantScope'
+  import { useUserStore } from '@/store/modules/user'
+  import {
+    deletePmisPlans,
+    fetchPmisPlans,
+    savePmisPlan,
+    type PmisPlan,
+    type PmisPlanFrequency,
+    type PmisPlanKind
+  } from '@pmis/api'
+  import PmisPlanDialog, { type PmisPlanDialogOpenData } from './plan-dialog.vue'
+
+  const props = defineProps<{ kind: PmisPlanKind }>()
+  interface DialogExpose {
+    handleOpen: (data: PmisPlanDialogOpenData) => Promise<void>
+  }
+  const { confirmAction } = useArtFeedback()
+  const tenantScopeStore = useTenantScopeStore()
+  const { effectiveTenantId, tenantOptions } = storeToRefs(tenantScopeStore)
+  const userStore = useUserStore()
+  const { getDictMap } = storeToRefs(userStore)
+  const tableRef = ref<ArtTableQueryExpose>()
+  const searchModel = ref<Record<string, unknown>>({ keyword: '', status: '' })
+  const dialogRef = ref<DialogExpose>()
+  const drawerRef = ref<ArtDrawerExpose<PmisPlan>>()
+  const detailRow = shallowRef<PmisPlan>()
+  const total = ref(0)
+  const rows = shallowRef<PmisPlan[]>([])
+  const kindLabel = computed(() => (props.kind === 'inspection' ? '点检' : '巡检'))
+  const routeName = computed(() =>
+    props.kind === 'inspection' ? 'PmisInspectionPlan' : 'PmisPatrolPlan'
+  )
+  const description = computed(() =>
+    props.kind === 'inspection'
+      ? '维护设备每日点检标准、适用设备与判定规则，方案变更后自动重排未执行任务。'
+      : '配置巡检周期、责任人、适用设备与检查标准，形成计划—执行—追溯闭环。'
+  )
+  const enabledCount = computed(() => rows.value.filter((row) => row.status === 'enabled').length)
+  const boundEquipmentCount = computed(
+    () =>
+      new Set(rows.value.flatMap((row) => row.equipmentBindings.map((item) => item.equipment?.id)))
+        .size
+  )
+  const itemCount = computed(() => rows.value.reduce((sum, row) => sum + row.items.length, 0))
+  const metrics = computed<BusinessWorkspaceMetric[]>(() => [
+    {
+      label: '方案总数',
+      value: total.value,
+      description: '当前可见范围',
+      icon: 'ri:file-list-3-line'
+    },
+    {
+      label: '启用方案',
+      value: enabledCount.value,
+      description: '正在生成任务',
+      icon: 'ri:checkbox-circle-line',
+      tone: 'success'
+    },
+    {
+      label: '覆盖设备',
+      value: boundEquipmentCount.value,
+      description: '去重设备数量',
+      icon: 'ri:tools-line',
+      tone: 'primary'
+    },
+    {
+      label: '检查项目',
+      value: itemCount.value,
+      description: '当前页项目总数',
+      icon: 'ri:list-check-3',
+      tone: 'info'
+    }
+  ])
+  const searchItems = computed<SearchFormItem[]>(() => [
+    {
+      label: '方案名称',
+      key: 'keyword',
+      type: 'input',
+      props: { clearable: true, placeholder: `搜索${kindLabel.value}方案名称` }
+    },
+    {
+      label: '方案状态',
+      key: 'status',
+      type: 'select',
+      props: { clearable: true, options: getDictMap.value.commonEnabledStatus ?? [] }
+    }
+  ])
+  void userStore.ensureDictLoaded('commonEnabledStatus')
+  const fetchData = async (params: Record<string, unknown>) => {
+    const result = await fetchPmisPlans(props.kind, {
+      current: Number(params.current || 1),
+      size: Number(params.size || 20),
+      keyword: String(params.keyword || ''),
+      status: String(params.status || '') || undefined
+    })
+    total.value = result.total
+    rows.value = result.data
+    return result
+  }
+  const dialogData = (row?: PmisPlan, copy = false): PmisPlanDialogOpenData => ({
+    kind: props.kind,
+    row,
+    copy,
+    targetTenantId: row?.tenantId || effectiveTenantId.value || undefined,
+    tenantOptions: tenantOptions.value.map((item) => ({
+      label: item.tenantName || item.tenantCode,
+      value: item.id
+    }))
+  })
+  const openDialog = (row?: PmisPlan, copy = false): void =>
+    void dialogRef.value?.handleOpen(dialogData(row, copy))
+  const refresh = (): void => void tableRef.value?.refreshData()
+  const showDetail = async (row: PmisPlan): Promise<void> => {
+    detailRow.value = row
+    await nextTick()
+    await drawerRef.value?.handleOpen(row, {
+      showFooter: false,
+      contentHeight: 'calc(100vh - 90px)'
+    })
+  }
+  const removeRows = async (selected: PmisPlan[]): Promise<void> => {
+    await confirmAction(
+      `确定删除选中的 ${selected.length} 个${kindLabel.value}方案吗？仍绑定设备的方案不能删除。`,
+      `删除${kindLabel.value}方案`,
+      { type: 'warning' }
+    )
+    await deletePmisPlans(
+      selected.map((row) => row.id),
+      props.kind
+    )
+    refresh()
+  }
+  const frequencyMap: Record<string, PmisPlanFrequency> = {
+    daily: 'daily',
+    weekly: 'weekly',
+    tenday: 'tenday',
+    monthly: 'monthly',
+    quarterly: 'quarterly',
+    yearly: 'yearly',
+    每日: 'daily',
+    每周: 'weekly',
+    每旬: 'tenday',
+    每月: 'monthly',
+    每季度: 'quarterly',
+    每年: 'yearly'
+  }
+  const importRows = async (importedRows: Record<string, unknown>[]): Promise<void> => {
+    const targetTenantId =
+      effectiveTenantId.value ||
+      (tenantOptions.value.length === 1 ? tenantOptions.value[0]?.id : '')
+    if (!targetTenantId) throw new Error('请先在顶部租户范围中选择一个具体租户后再导入方案')
+
+    for (const [index, row] of importedRows.entries()) {
+      const planName = String(row['方案名称'] || '').trim()
+      const itemName = String(
+        row['检查内容'] || row['点检内容'] || row['巡检内容'] || '基础检查'
+      ).trim()
+      const requirement = String(row['检查要求'] || row['检查标准'] || '按设备标准完成检查').trim()
+      const frequencySource = String(row['频次'] || row['执行频次'] || 'daily').trim()
+      const frequency = frequencyMap[frequencySource]
+      if (!planName) throw new Error(`第 ${index + 2} 行缺少方案名称`)
+      if (!frequency) throw new Error(`第 ${index + 2} 行执行频次无效`)
+
+      await savePmisPlan({
+        tenantId: targetTenantId,
+        planKind: props.kind,
+        planName,
+        frequency,
+        frequencyValue: null,
+        advanceDays: 0,
+        requiredDays: Math.max(Number(row['完成时长（天）'] || 1), 1),
+        holidayPolicy: 'postpone',
+        notificationRules: [],
+        requirePhoto: false,
+        sopFiles: [],
+        status: 'disabled',
+        remark: String(row['方案说明'] || 'Excel 导入；请绑定设备和负责人后启用'),
+        items: [
+          {
+            itemName,
+            requirement,
+            judgmentRule: String(row['判定规则'] || ''),
+            requirePhoto: false,
+            sort: 10
+          }
+        ],
+        equipmentIds: [],
+        responsibleEmployeeIds: []
+      })
+    }
+    refresh()
+  }
+  const moreActions = (): ButtonMoreItem[] => [
+    { key: 'copy', label: '复制方案', icon: 'ri:file-copy-line', auth: `${routeName.value}:Copy` },
+    {
+      key: 'delete',
+      label: '删除',
+      icon: 'ri:delete-bin-6-line',
+      color: 'var(--el-color-danger)',
+      auth: `${routeName.value}:Delete`
+    }
+  ]
+  const columnsFactory = (): ColumnOption<PmisPlan>[] => [
+    { type: 'selection', width: 48 },
+    { type: 'globalIndex', label: '序号', width: 70, fixed: 'left' },
+    {
+      prop: 'planName',
+      label: '方案名称',
+      minWidth: 220,
+      fixed: 'left',
+      formatter: (row) => (
+        <button
+          type="button"
+          class="pmis-plan-workspace__link"
+          onClick={() => void showDetail(row)}
+        >
+          <strong>{row.planName}</strong>
+          <small>{row.planKind === 'inspection' ? '设备点检' : '设备巡检'}</small>
+        </button>
+      )
+    },
+    {
+      prop: 'frequency',
+      label: '频次',
+      width: 100,
+      align: 'center',
+      dict: { code: 'pmisPlanFrequency', display: 'tag' }
+    },
+    {
+      prop: 'responsibleBindings',
+      label: '负责人',
+      minWidth: 150,
+      formatter: (row) =>
+        row.responsibleBindings
+          .map((item) => item.employee?.employeeName)
+          .filter(Boolean)
+          .join('、') || '—'
+    },
+    {
+      prop: 'equipmentBindings',
+      label: '适用设备',
+      width: 110,
+      align: 'center',
+      formatter: (row) => `${row.equipmentBindings.length} 台`
+    },
+    {
+      prop: 'items',
+      label: '检查项',
+      width: 100,
+      align: 'center',
+      formatter: (row) => `${row.items.length} 项`
+    },
+    {
+      prop: 'requiredDays',
+      label: '完成时长',
+      width: 110,
+      align: 'center',
+      formatter: (row) => `${row.requiredDays} 天`
+    },
+    {
+      prop: 'status',
+      label: '状态',
+      width: 96,
+      align: 'center',
+      dict: { code: 'commonEnabledStatus', display: 'tag' }
+    },
+    {
+      prop: 'updateTime',
+      label: '最近维护',
+      width: 164,
+      formatter: (row) => dayjs(row.updateTime).format('YYYY-MM-DD HH:mm')
+    },
+    {
+      prop: 'operation',
+      label: '操作',
+      width: 176,
+      fixed: 'right',
+      formatter: (row) => (
+        <div class="pmis-plan-workspace__row-actions">
+          <ArtButtonTable
+            permission={`${routeName.value}:View`}
+            type="view"
+            onClick={() => void showDetail(row)}
+          />
+          <ArtButtonTable
+            permission={`${routeName.value}:Edit`}
+            type="edit"
+            onClick={() => openDialog(row)}
+          />
+          <ArtButtonMore
+            list={moreActions}
+            onClick={(item) =>
+              item.key === 'copy' ? openDialog(row, true) : void removeRows([row])
+            }
+          />
+        </div>
+      )
+    }
+  ]
+  const headerActions = computed<ArtTableQueryHeaderAction[]>(() => [
+    {
+      type: 'add',
+      label: `新增${kindLabel.value}方案`,
+      permission: `${routeName.value}:Add`,
+      onClick: () => openDialog()
+    },
+    {
+      type: 'import',
+      permission: `${routeName.value}:Import`,
+      onImportSuccess: importRows
+    },
+    {
+      type: 'export',
+      permission: `${routeName.value}:Export`,
+      exportFilename: `${kindLabel.value}方案`
+    },
+    {
+      type: 'delete',
+      permission: `${routeName.value}:Delete`,
+      selectionRequired: true,
+      content: ({ selectedCount }: ArtTableQueryHeaderActionContext) =>
+        `确定删除选中的 ${selectedCount} 个方案吗？`,
+      onClick: async ({ selectedRows }) => removeRows(selectedRows as PmisPlan[])
+    }
+  ])
+  const excelColumns: ArtTableQueryExcelColumn[] = [
+    { key: 'planName', title: '方案名称' },
+    { key: 'frequency', title: '频次' },
+    { key: 'requiredDays', title: '完成时长（天）' },
+    { key: 'status', title: '状态' },
+    { key: 'updateTime', title: '最近维护时间' }
+  ]
+  const detailDescriptions = computed(() =>
+    detailRow.value
+      ? [
+          { key: 'name', label: '方案名称', value: detailRow.value.planName },
+          { key: 'frequency', label: '执行频次', value: detailRow.value.frequency },
+          {
+            key: 'equipment',
+            label: '适用设备',
+            value:
+              detailRow.value.equipmentBindings
+                .map((item) => item.equipment?.equipmentName)
+                .filter(Boolean)
+                .join('、') || '—'
+          },
+          {
+            key: 'responsible',
+            label: '负责人',
+            value:
+              detailRow.value.responsibleBindings
+                .map((item) => item.employee?.employeeName)
+                .filter(Boolean)
+                .join('、') || '—'
+          },
+          {
+            key: 'requiredDays',
+            label: '要求完成时长',
+            value: `${detailRow.value.requiredDays} 天`
+          },
+          { key: 'remark', label: '方案说明', value: detailRow.value.remark || '—', span: 2 }
+        ]
+      : []
+  )
+</script>
+
+<style scoped lang="scss">
+  .pmis-plan-workspace {
+    &__link {
+      display: grid;
+      gap: 3px;
+      width: 100%;
+      padding: 0;
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+      background: transparent;
+      border: 0;
+
+      strong {
+        color: var(--theme-color);
+      }
+
+      small {
+        font-size: 11px;
+        color: var(--el-text-color-secondary);
+      }
+
+      &:focus-visible {
+        outline: 2px solid color-mix(in srgb, var(--theme-color) 55%, transparent);
+        outline-offset: 3px;
+      }
+    }
+
+    &__row-actions {
+      display: flex;
+      align-items: center;
+    }
+
+    &__item-list {
+      display: grid;
+      gap: 0;
+      padding: 0;
+      margin: 0;
+      list-style: none;
+
+      li {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+        padding: 12px 0;
+      }
+
+      li + li {
+        border-top: 1px solid var(--el-border-color-lighter);
+      }
+
+      li > span {
+        font-variant-numeric: tabular-nums;
+        color: var(--theme-color);
+      }
+
+      strong,
+      small {
+        display: block;
+      }
+
+      small {
+        margin-top: 3px;
+        color: var(--el-text-color-secondary);
+      }
+    }
+  }
+</style>

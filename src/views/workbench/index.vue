@@ -16,7 +16,7 @@
     <div class="pmis-workbench__grid">
       <ArtSectionCard
         title="设备运维闭环"
-        subtitle="沿用现有点检、巡检菜单，按统一任务链路组织后续能力。"
+        subtitle="点检与巡检已按统一任务链路贯通方案、任务、结果和分析。"
         preserve-content-structure
       >
         <div class="operation-flow" aria-label="设备运维业务闭环">
@@ -49,7 +49,7 @@
       <ArtSectionCard
         class="pmis-workbench__capabilities"
         title="既有菜单能力"
-        subtitle="名称与层级保持不变，功能按审核节奏逐步实现。"
+        subtitle="名称与层级保持不变，九个业务入口均已接入真实设备主档与租户数据。"
         preserve-content-structure
       >
         <div class="capability-grid">
@@ -93,14 +93,14 @@
     {
       label: '点检菜单',
       value: 6,
-      description: '原有名称与层级',
+      description: '点检业务入口',
       icon: 'ri:task-line',
       tone: 'primary'
     },
     {
       label: '巡检菜单',
       value: 3,
-      description: '原有名称与层级',
+      description: '巡检业务入口',
       icon: 'ri:route-line',
       tone: 'primary'
     },

@@ -48,6 +48,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: env.VITE_BASE_URL || '/',
+    envDir: platformRoot,
     define: {
       __APP_VERSION__: JSON.stringify(env.VITE_VERSION || '1.0.0'),
       'import.meta.env.VITE_APP_CODE': JSON.stringify('pmis')
