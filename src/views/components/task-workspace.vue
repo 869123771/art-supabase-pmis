@@ -91,6 +91,7 @@
         </ArtSectionCard>
       </template>
     </ArtDrawer>
+    <PmisTaskExecutionDialog ref="executionRef" @success="handleExecutionSuccess" />
   </div>
 </template>
 
@@ -115,16 +116,24 @@
     ArtTableQueryHeaderAction
   } from '@/components/core/tables/art-table-query/index.vue'
   import type { ColumnOption } from '@/types'
+  import { useAuth } from '@/hooks/core/useAuth'
   import { useUserStore } from '@/store/modules/user'
   import { fetchPmisTasks, summarizePmisTasks, type PmisPlanKind, type PmisTask } from '@pmis/api'
   import PmisDepartmentNavigator from './department-navigator.vue'
+  import PmisTaskExecutionDialog, {
+    type PmisTaskExecutionDialogOpenData
+  } from './task-execution-dialog.vue'
 
   const props = defineProps<{ kind: PmisPlanKind; mode: 'task' | 'report' }>()
   const userStore = useUserStore()
+  const { hasAuth } = useAuth()
   const { getDictMap } = storeToRefs(userStore)
   const tableRef = ref<ArtTableQueryExpose>()
   const drawerRef = ref<ArtDrawerExpose<PmisTask>>()
   const detailRow = shallowRef<PmisTask>()
+  const executionRef = ref<{
+    handleOpen: (data: PmisTaskExecutionDialogOpenData) => Promise<void>
+  }>()
   const searchModel = ref<Record<string, unknown>>({
     keyword: '',
     dateRange: [],
@@ -230,9 +239,14 @@
       contentHeight: 'calc(100vh - 90px)'
     })
   }
-  const permissionPrefix = computed(() =>
-    props.kind === 'inspection' ? 'PmisInspectionReport' : 'PmisPatrolTask'
+  const viewPermission = computed(() =>
+    props.kind === 'inspection' ? 'PmisInspectionReport:ViewDetail' : 'PmisPatrolTask:View'
   )
+  const exportPermission = computed(() =>
+    props.kind === 'inspection' ? 'PmisInspectionReport:Export' : 'PmisPatrolTask:Export'
+  )
+  const openExecution = (row: PmisTask): void => void executionRef.value?.handleOpen({ task: row })
+  const handleExecutionSuccess = (): void => void tableRef.value?.refreshData()
   const columnsFactory = (): ColumnOption<PmisTask>[] => [
     { type: 'globalIndex', label: '序号', width: 70, fixed: 'left' },
     {
@@ -240,15 +254,18 @@
       label: '任务单号',
       minWidth: 190,
       fixed: 'left',
-      formatter: (row) => (
-        <button
-          type="button"
-          class="pmis-task-workspace__link"
-          onClick={() => void showDetail(row)}
-        >
-          {row.taskNo}
-        </button>
-      )
+      formatter: (row) =>
+        hasAuth(viewPermission.value) ? (
+          <button
+            type="button"
+            class="pmis-task-workspace__link"
+            onClick={() => void showDetail(row)}
+          >
+            {row.taskNo}
+          </button>
+        ) : (
+          <span class="pmis-task-workspace__link is-static">{row.taskNo}</span>
+        )
     },
     { prop: 'plan', label: '方案名称', minWidth: 180, formatter: (row) => row.plan.planName },
     { prop: 'plannedDate', label: '计划日期', width: 118 },
@@ -293,20 +310,31 @@
     {
       prop: 'operation',
       label: '操作',
-      width: 86,
+      width: props.kind === 'patrol' && props.mode === 'task' ? 176 : 86,
       fixed: 'right',
       align: 'center',
       formatter: (row) => (
-        <ArtButtonTable
-          permission={`${permissionPrefix.value}:View${props.mode === 'report' ? 'Detail' : ''}`}
-          type="view"
-          onClick={() => void showDetail(row)}
-        />
+        <div class="pmis-task-workspace__row-actions">
+          <ArtButtonTable
+            permission={viewPermission.value}
+            type="view"
+            onClick={() => void showDetail(row)}
+          />
+          {props.kind === 'patrol' && props.mode === 'task' && row.status === 'pending' ? (
+            <ArtButtonTable
+              permission="PmisPatrolTask:Execute"
+              type="more"
+              icon="ri:play-circle-line"
+              label="执行巡检"
+              onClick={() => openExecution(row)}
+            />
+          ) : null}
+        </div>
       )
     }
   ]
   const headerActions = computed<ArtTableQueryHeaderAction[]>(() => [
-    { type: 'export', permission: `${permissionPrefix.value}:Export`, exportFilename: title.value }
+    { type: 'export', permission: exportPermission.value, exportFilename: title.value }
   ])
   const excelColumns: ArtTableQueryExcelColumn[] = [
     { key: 'taskNo', title: '任务单号' },
@@ -380,6 +408,18 @@
     &__link:focus-visible {
       outline: 2px solid color-mix(in srgb, var(--theme-color) 55%, transparent);
       outline-offset: 3px;
+    }
+
+    &__link.is-static {
+      color: var(--el-text-color-primary);
+      cursor: default;
+    }
+
+    &__row-actions {
+      display: flex;
+      gap: var(--art-space-1);
+      align-items: center;
+      justify-content: center;
     }
 
     &__result-list {

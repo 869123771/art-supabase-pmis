@@ -15,6 +15,7 @@
     empty-description="请先在 MDM 生产设备中维护已启用设备及部门/产线归属。"
     show-pagination
     :page-size="10"
+    :disabled="!tenantId"
     @update:model-value="emit('update:modelValue', normalizeIds($event))"
     @update:selected-data="emit('update:selectedData', normalizeRows($event))"
   />
@@ -31,10 +32,18 @@
   import { fetchPmisEquipmentOptions, type PmisEquipmentOption } from '@pmis/api'
 
   defineOptions({ name: 'PmisEquipmentMultipleSelect' })
-  withDefaults(defineProps<{ modelValue?: string[]; selectedData?: PmisEquipmentOption[] }>(), {
-    modelValue: () => [],
-    selectedData: () => []
-  })
+  const props = withDefaults(
+    defineProps<{
+      modelValue?: string[]
+      selectedData?: PmisEquipmentOption[]
+      tenantId?: string | null
+    }>(),
+    {
+      modelValue: () => [],
+      selectedData: () => [],
+      tenantId: null
+    }
+  )
   const emit = defineEmits<{
     'update:modelValue': [value: string[]]
     'update:selectedData': [rows: PmisEquipmentOption[]]
@@ -60,7 +69,8 @@
     fetchPmisEquipmentOptions({
       current: params.page,
       size: params.pageSize,
-      keyword: params.keyword
+      keyword: params.keyword,
+      tenantId: props.tenantId || undefined
     })
   const normalizeIds = (value: DataSelectKey | DataSelectKey[] | undefined): string[] =>
     (Array.isArray(value) ? value : value == null ? [] : [value]).map(String)

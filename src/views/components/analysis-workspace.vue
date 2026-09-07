@@ -13,7 +13,7 @@
     >
       <template #actions>
         <ArtExcelExport
-          v-auth="`${routeName}:Export`"
+          v-auth="exportPermission"
           :data="exportRows"
           :columns="exportColumns"
           :filename="`${kindLabel}分析`"
@@ -173,8 +173,8 @@
     rows: []
   })
   const kindLabel = computed(() => (props.kind === 'inspection' ? '点检' : '巡检'))
-  const routeName = computed(() =>
-    props.kind === 'inspection' ? 'PmisInspectionAnalysis' : 'PmisPatrolAnalysis'
+  const exportPermission = computed(() =>
+    props.kind === 'inspection' ? 'PmisInspectionAnalysis:Export' : 'PmisPatrolAnalysis:Export'
   )
   const dateCaption = computed(
     () => `${query.dateRange[0] || '不限'} 至 ${query.dateRange[1] || '不限'}`
@@ -324,7 +324,7 @@
       font-variant-numeric: tabular-nums;
       color: var(--theme-color);
       background: color-mix(in srgb, var(--theme-color) 9%, var(--el-bg-color));
-      border-radius: 10px;
+      border-radius: var(--el-border-radius-base);
     }
 
     &__identity strong,

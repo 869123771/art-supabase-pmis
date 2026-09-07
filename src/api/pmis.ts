@@ -10,6 +10,7 @@ import type {
   PmisPlanInput,
   PmisPlanKind,
   PmisTask,
+  PmisTaskExecutionInput,
   PmisTaskOverview,
   PmisTaskStatus
 } from './types'
@@ -27,7 +28,7 @@ const equipmentSelect = `
 const taskSelect = `
   id, tenant_id, task_no, planned_date, shift_name, status, completed_at, execution_summary,
   plan:pmis_plan!pmis_task_plan_fkey!inner(
-    id, plan_kind, plan_name, required_days,
+    id, plan_kind, plan_name, required_days, require_photo,
     items:pmis_plan_item(id,item_name,requirement,judgment_rule,require_photo,sort)
   ),
   equipment:mdm_equipment!pmis_task_equipment_fkey!inner(${equipmentSelect}),
@@ -77,6 +78,7 @@ export async function fetchPmisEquipmentOptions(params: PmisPageQuery = {}) {
       `equipment_code.ilike.%${params.keyword.trim()}%,equipment_name.ilike.%${params.keyword.trim()}%`
     )
   if (params.departmentId) query = query.eq('production_department_id', params.departmentId)
+  if (params.tenantId) query = query.eq('tenant_id', params.tenantId)
   const result = await responseHandle<PmisEquipmentOption[]>(() => query, {
     showErrorMessage: true,
     errorMessage: '设备列表加载失败，请重试'
@@ -163,7 +165,11 @@ export async function fetchPmisTasks(kind: PmisPlanKind, params: PmisPageQuery =
   if (params.planId) query = query.eq('plan_id', params.planId)
   if (params.dateFrom) query = query.gte('planned_date', params.dateFrom)
   if (params.dateTo) query = query.lte('planned_date', params.dateTo)
-  if (params.status && params.status !== 'overdue') query = query.eq('status', params.status)
+  if (params.status === 'overdue')
+    query = query.eq('status', 'pending').lt('planned_date', dayjs().format('YYYY-MM-DD'))
+  else if (params.status === 'pending')
+    query = query.eq('status', 'pending').gte('planned_date', dayjs().format('YYYY-MM-DD'))
+  else if (params.status) query = query.eq('status', params.status)
   const result = await responseHandle<PmisTask[]>(() => query, {
     showErrorMessage: true,
     errorMessage: `${kind === 'inspection' ? '点检' : '巡检'}任务加载失败，请重试`
@@ -171,11 +177,27 @@ export async function fetchPmisTasks(kind: PmisPlanKind, params: PmisPageQuery =
   let rows = (result.data ?? []).map(normalizeTask)
   if (params.departmentId)
     rows = rows.filter((row) => row.equipment?.productionDepartmentId === params.departmentId)
-  if (params.status === 'overdue') rows = rows.filter((row) => row.displayStatus === 'overdue')
   return {
     data: rows,
-    total: params.departmentId || params.status === 'overdue' ? rows.length : (result.total ?? 0)
+    total: params.departmentId ? rows.length : (result.total ?? 0)
   }
+}
+
+export async function completePmisTask(input: PmisTaskExecutionInput): Promise<void> {
+  await responseHandle<string>(
+    () =>
+      supabase.rpc('pmis_complete_task_secure', {
+        p_task_id: input.taskId,
+        p_payload: keysToSnakeDeep(omit(input, ['taskId']))
+      }),
+    {
+      breakReturn: true,
+      showMessage: true,
+      showErrorMessage: true,
+      message: '任务已提交完成',
+      errorMessage: '任务提交失败，请检查执行人、项目结果和现场图片'
+    }
+  )
 }
 
 export async function fetchPmisTaskSnapshot(kind: PmisPlanKind, params: PmisPageQuery = {}) {

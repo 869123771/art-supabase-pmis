@@ -18,7 +18,7 @@
     >
       <template #actions>
         <ArtExcelExport
-          v-auth="`${routeName}:Export`"
+          v-auth="exportPermission"
           :data="exportRows"
           :columns="exportColumns"
           :filename="mode === 'sheet' ? '设备点检表' : '点检明细表'"
@@ -94,7 +94,17 @@
 
     <ArtDrawer ref="drawerRef" title="点检任务明细" size="lg">
       <template v-if="detailTask">
-        <ArtSectionCard title="任务摘要" subtitle="双击矩阵状态打开">
+        <ArtSectionCard title="任务摘要" subtitle="计划、设备与当前执行状态">
+          <template #actions>
+            <ElButton
+              v-if="mode === 'sheet' && detailTask.status === 'pending'"
+              v-auth="'PmisInspectionSheet:Execute'"
+              type="primary"
+              @click="openExecution(detailTask)"
+            >
+              <ArtSvgIcon icon="ri:play-circle-line" />执行点检
+            </ElButton>
+          </template>
           <ArtDescriptions :columns="2" :data="detailTask" :items="taskDescriptions" />
         </ArtSectionCard>
         <ArtSectionCard
@@ -119,6 +129,7 @@
         </ArtSectionCard>
       </template>
     </ArtDrawer>
+    <PmisTaskExecutionDialog ref="executionRef" @success="handleExecutionSuccess" />
   </div>
 </template>
 
@@ -140,6 +151,7 @@
     type BusinessWorkspaceMetric
   } from '@/components/business/business-workspace-header/index.vue'
   import type { ColumnOption } from '@/types'
+  import { useAuth } from '@/hooks/core/useAuth'
   import { useUserStore } from '@/store/modules/user'
   import {
     fetchPmisEquipmentOptions,
@@ -151,8 +163,12 @@
     type PmisTaskStatus
   } from '@pmis/api'
   import PmisDepartmentNavigator from './department-navigator.vue'
+  import PmisTaskExecutionDialog, {
+    type PmisTaskExecutionDialogOpenData
+  } from './task-execution-dialog.vue'
 
   const props = defineProps<{ mode: 'sheet' | 'detail' }>()
+  const { hasAuth } = useAuth()
   interface CalendarQuery {
     month: string
     equipmentId: string
@@ -180,9 +196,15 @@
   const departmentIds = ref<string[]>([])
   const departmentLabel = ref('全部产线')
   const drawerRef = ref<ArtDrawerExpose<PmisTask>>()
+  const executionRef = ref<{
+    handleOpen: (data: PmisTaskExecutionDialogOpenData) => Promise<void>
+  }>()
   const detailTask = shallowRef<PmisTask>()
-  const routeName = computed(() =>
-    props.mode === 'sheet' ? 'PmisInspectionSheet' : 'PmisInspectionDetail'
+  const exportPermission = computed(() =>
+    props.mode === 'sheet' ? 'PmisInspectionSheet:Export' : 'PmisInspectionDetail:Export'
+  )
+  const viewPermission = computed(() =>
+    props.mode === 'sheet' ? 'PmisInspectionSheet:ViewDetail' : 'PmisInspectionDetail:ViewDetail'
   )
   const monthCaption = computed(() => dayjs(`${query.month}-01`).format('YYYY年MM月'))
   const monthStart = computed(() => dayjs(`${query.month}-01`).startOf('month'))
@@ -309,7 +331,7 @@
     }))
   })
   const showTask = async (task?: PmisTask): Promise<void> => {
-    if (!task) return
+    if (!task || !hasAuth(viewPermission.value)) return
     detailTask.value = task
     await nextTick()
     await drawerRef.value?.handleOpen(task, {
@@ -317,17 +339,27 @@
       contentHeight: 'calc(100vh - 90px)'
     })
   }
+  const openExecution = (value: PmisTask): void =>
+    void executionRef.value?.handleOpen({ task: value })
+  const handleExecutionSuccess = (): void => {
+    drawerRef.value?.handleClose()
+    void load()
+  }
   const cell = (task?: PmisTask) =>
-    task ? (
+    task && hasAuth(viewPermission.value) ? (
       <button
         type="button"
         class={['pmis-calendar__status', `is-${task.displayStatus}`]}
-        title={`${task.plannedDate} · 双击查看任务明细`}
-        aria-label={`${task.plannedDate} ${task.displayStatus}，双击查看明细`}
-        onDblclick={() => void showTask(task)}
+        title={`${task.plannedDate} · 查看任务明细`}
+        aria-label={`${task.plannedDate} ${task.displayStatus}，查看明细`}
+        onClick={() => void showTask(task)}
       >
         {task.displayStatus === 'completed' ? '✓' : task.displayStatus === 'exempt' ? '免' : '•'}
       </button>
+    ) : task ? (
+      <span class={['pmis-calendar__status', 'is-readonly', `is-${task.displayStatus}`]}>
+        {task.displayStatus === 'completed' ? '✓' : task.displayStatus === 'exempt' ? '免' : '•'}
+      </span>
     ) : (
       <span class="pmis-calendar__empty-cell">—</span>
     )
@@ -354,7 +386,7 @@
     }))
   ])
   const matrixSubtitle = computed(
-    () => `${monthCaption.value} · ${departmentLabel.value} · 双击状态单元格查看任务明细`
+    () => `${monthCaption.value} · ${departmentLabel.value} · 单击状态单元格查看任务明细`
   )
   const load = async (): Promise<void> => {
     state.loading = true
@@ -572,6 +604,10 @@
     &__status:focus-visible {
       outline: 2px solid color-mix(in srgb, var(--theme-color) 55%, transparent);
       outline-offset: 2px;
+    }
+
+    &__status.is-readonly {
+      cursor: default;
     }
 
     &__empty-cell {

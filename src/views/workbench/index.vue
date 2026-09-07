@@ -201,7 +201,7 @@
     color: var(--el-color-primary);
     background: color-mix(in srgb, var(--theme-color) 10%, var(--el-bg-color));
     border: 1px solid color-mix(in srgb, var(--theme-color) 24%, var(--el-border-color-lighter));
-    border-radius: 15px;
+    border-radius: var(--custom-radius);
   }
 
   .operation-flow strong,
@@ -246,7 +246,7 @@
     height: 32px;
     color: var(--el-color-success);
     background: var(--el-color-success-light-9);
-    border-radius: 9px;
+    border-radius: var(--el-border-radius-base);
   }
 
   .boundary-list strong,
@@ -295,7 +295,7 @@
     font-size: 18px;
     color: var(--el-color-primary);
     background: color-mix(in srgb, var(--theme-color) 9%, var(--el-bg-color));
-    border-radius: 10px;
+    border-radius: var(--el-border-radius-base);
   }
 
   .capability-grid__heading small,

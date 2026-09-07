@@ -97,7 +97,9 @@ export interface PmisTask {
   displayStatus: PmisTaskStatus
   completedAt?: string | null
   executionSummary?: string | null
-  plan: Pick<PmisPlan, 'id' | 'planKind' | 'planName' | 'requiredDays'> & { items: PmisPlanItem[] }
+  plan: Pick<PmisPlan, 'id' | 'planKind' | 'planName' | 'requiredDays' | 'requirePhoto'> & {
+    items: PmisPlanItem[]
+  }
   equipment: PmisEquipmentOption
   responsible?: { id: string; employeeNo: string; employeeName: string } | null
   results: PmisTaskResult[]
@@ -114,6 +116,22 @@ export interface PmisPageQuery {
   planId?: string
   dateFrom?: string
   dateTo?: string
+  tenantId?: string
+}
+
+export interface PmisTaskExecutionResultInput {
+  planItemId: string
+  resultStatus: 'ok' | 'ng' | 'exempt'
+  resultValue?: string | null
+  photoFiles: string[]
+  remark?: string | null
+}
+
+export interface PmisTaskExecutionInput {
+  taskId: string
+  executorEmployeeId: string
+  executionSummary?: string | null
+  results: PmisTaskExecutionResultInput[]
 }
 
 export interface PmisTaskOverview {

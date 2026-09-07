@@ -88,6 +88,7 @@
     ArtTableQueryHeaderActionContext
   } from '@/components/core/tables/art-table-query/index.vue'
   import type { ColumnOption } from '@/types'
+  import { useAuth } from '@/hooks/core/useAuth'
   import { useArtFeedback } from '@/hooks/core/useArtFeedback'
   import { useTenantScopeStore } from '@/store/modules/tenantScope'
   import { useUserStore } from '@/store/modules/user'
@@ -106,6 +107,7 @@
     handleOpen: (data: PmisPlanDialogOpenData) => Promise<void>
   }
   const { confirmAction } = useArtFeedback()
+  const { hasAuth } = useAuth()
   const tenantScopeStore = useTenantScopeStore()
   const { effectiveTenantId, tenantOptions } = storeToRefs(tenantScopeStore)
   const userStore = useUserStore()
@@ -118,8 +120,26 @@
   const total = ref(0)
   const rows = shallowRef<PmisPlan[]>([])
   const kindLabel = computed(() => (props.kind === 'inspection' ? '点检' : '巡检'))
-  const routeName = computed(() =>
-    props.kind === 'inspection' ? 'PmisInspectionPlan' : 'PmisPatrolPlan'
+  const permissions = computed(() =>
+    props.kind === 'inspection'
+      ? {
+          view: 'PmisInspectionPlan:View',
+          add: 'PmisInspectionPlan:Add',
+          copy: 'PmisInspectionPlan:Copy',
+          edit: 'PmisInspectionPlan:Edit',
+          delete: 'PmisInspectionPlan:Delete',
+          import: 'PmisInspectionPlan:Import',
+          export: 'PmisInspectionPlan:Export'
+        }
+      : {
+          view: 'PmisPatrolPlan:View',
+          add: 'PmisPatrolPlan:Add',
+          copy: 'PmisPatrolPlan:Copy',
+          edit: 'PmisPatrolPlan:Edit',
+          delete: 'PmisPatrolPlan:Delete',
+          import: 'PmisPatrolPlan:Import',
+          export: 'PmisPatrolPlan:Export'
+        }
   )
   const description = computed(() =>
     props.kind === 'inspection'
@@ -188,16 +208,22 @@
     rows.value = result.data
     return result
   }
-  const dialogData = (row?: PmisPlan, copy = false): PmisPlanDialogOpenData => ({
-    kind: props.kind,
-    row,
-    copy,
-    targetTenantId: row?.tenantId || effectiveTenantId.value || undefined,
-    tenantOptions: tenantOptions.value.map((item) => ({
-      label: item.tenantName || item.tenantCode,
-      value: item.id
-    }))
-  })
+  const dialogData = (row?: PmisPlan, copy = false): PmisPlanDialogOpenData => {
+    const targetTenantId = row?.tenantId || effectiveTenantId.value || undefined
+    const availableTenants = targetTenantId
+      ? tenantOptions.value.filter((item) => item.id === targetTenantId)
+      : tenantOptions.value
+    return {
+      kind: props.kind,
+      row,
+      copy,
+      targetTenantId,
+      tenantOptions: availableTenants.map((item) => ({
+        label: item.tenantName || item.tenantCode,
+        value: item.id
+      }))
+    }
+  }
   const openDialog = (row?: PmisPlan, copy = false): void =>
     void dialogRef.value?.handleOpen(dialogData(row, copy))
   const refresh = (): void => void tableRef.value?.refreshData()
@@ -236,12 +262,21 @@
     每年: 'yearly'
   }
   const importRows = async (importedRows: Record<string, unknown>[]): Promise<void> => {
-    const targetTenantId =
-      effectiveTenantId.value ||
-      (tenantOptions.value.length === 1 ? tenantOptions.value[0]?.id : '')
-    if (!targetTenantId) throw new Error('请先在顶部租户范围中选择一个具体租户后再导入方案')
-
     for (const [index, row] of importedRows.entries()) {
+      const tenantSource = String(row['目标租户'] || row['租户'] || '').trim()
+      const matchedTenant = tenantOptions.value.find(
+        (item) =>
+          item.id === tenantSource ||
+          item.tenantCode === tenantSource ||
+          item.tenantName === tenantSource
+      )
+      const targetTenantId =
+        effectiveTenantId.value ||
+        (tenantOptions.value.length === 1 ? tenantOptions.value[0]?.id : matchedTenant?.id)
+      if (!targetTenantId)
+        throw new Error(
+          `第 ${index + 2} 行缺少有效的目标租户；全部租户范围导入时请填写“目标租户”列`
+        )
       const planName = String(row['方案名称'] || '').trim()
       const itemName = String(
         row['检查内容'] || row['点检内容'] || row['巡检内容'] || '基础检查'
@@ -282,13 +317,13 @@
     refresh()
   }
   const moreActions = (): ButtonMoreItem[] => [
-    { key: 'copy', label: '复制方案', icon: 'ri:file-copy-line', auth: `${routeName.value}:Copy` },
+    { key: 'copy', label: '复制方案', icon: 'ri:file-copy-line', auth: permissions.value.copy },
     {
       key: 'delete',
       label: '删除',
       icon: 'ri:delete-bin-6-line',
       color: 'var(--el-color-danger)',
-      auth: `${routeName.value}:Delete`
+      auth: permissions.value.delete
     }
   ]
   const columnsFactory = (): ColumnOption<PmisPlan>[] => [
@@ -299,16 +334,22 @@
       label: '方案名称',
       minWidth: 220,
       fixed: 'left',
-      formatter: (row) => (
-        <button
-          type="button"
-          class="pmis-plan-workspace__link"
-          onClick={() => void showDetail(row)}
-        >
-          <strong>{row.planName}</strong>
-          <small>{row.planKind === 'inspection' ? '设备点检' : '设备巡检'}</small>
-        </button>
-      )
+      formatter: (row) =>
+        hasAuth(permissions.value.view) ? (
+          <button
+            type="button"
+            class="pmis-plan-workspace__link"
+            onClick={() => void showDetail(row)}
+          >
+            <strong>{row.planName}</strong>
+            <small>{row.planKind === 'inspection' ? '设备点检' : '设备巡检'}</small>
+          </button>
+        ) : (
+          <span class="pmis-plan-workspace__link is-static">
+            <strong>{row.planName}</strong>
+            <small>{row.planKind === 'inspection' ? '设备点检' : '设备巡检'}</small>
+          </span>
+        )
     },
     {
       prop: 'frequency',
@@ -369,17 +410,17 @@
       formatter: (row) => (
         <div class="pmis-plan-workspace__row-actions">
           <ArtButtonTable
-            permission={`${routeName.value}:View`}
+            permission={permissions.value.view}
             type="view"
             onClick={() => void showDetail(row)}
           />
           <ArtButtonTable
-            permission={`${routeName.value}:Edit`}
+            permission={permissions.value.edit}
             type="edit"
             onClick={() => openDialog(row)}
           />
           <ArtButtonMore
-            list={moreActions}
+            list={moreActions()}
             onClick={(item) =>
               item.key === 'copy' ? openDialog(row, true) : void removeRows([row])
             }
@@ -392,22 +433,22 @@
     {
       type: 'add',
       label: `新增${kindLabel.value}方案`,
-      permission: `${routeName.value}:Add`,
+      permission: permissions.value.add,
       onClick: () => openDialog()
     },
     {
       type: 'import',
-      permission: `${routeName.value}:Import`,
+      permission: permissions.value.import,
       onImportSuccess: importRows
     },
     {
       type: 'export',
-      permission: `${routeName.value}:Export`,
+      permission: permissions.value.export,
       exportFilename: `${kindLabel.value}方案`
     },
     {
       type: 'delete',
-      permission: `${routeName.value}:Delete`,
+      permission: permissions.value.delete,
       selectionRequired: true,
       content: ({ selectedCount }: ArtTableQueryHeaderActionContext) =>
         `确定删除选中的 ${selectedCount} 个方案吗？`,
@@ -480,6 +521,11 @@
       &:focus-visible {
         outline: 2px solid color-mix(in srgb, var(--theme-color) 55%, transparent);
         outline-offset: 3px;
+      }
+
+      &.is-static {
+        color: var(--el-text-color-primary);
+        cursor: default;
       }
     }
 

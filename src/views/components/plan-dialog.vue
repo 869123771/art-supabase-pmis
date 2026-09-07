@@ -25,6 +25,7 @@
           <PmisEquipmentMultipleSelect
             v-model="form.equipmentIds"
             v-model:selected-data="selectedEquipment"
+            :tenant-id="form.tenantId"
           />
         </template>
         <template #responsibleEmployeeIds>
@@ -260,6 +261,16 @@
     form.frequencyValue = defaults[form.frequency] ?? null
   }
   watch(() => form.frequency, normalizeFrequencyValue)
+  watch(
+    () => form.tenantId,
+    (value, previousValue) => {
+      if (!previousValue || value === previousValue || form.id) return
+      form.equipmentIds = []
+      form.responsibleEmployeeIds = []
+      selectedEquipment.value = []
+      selectedEmployees.value = []
+    }
+  )
 
   const handleSubmit = async (): Promise<boolean> => {
     try {
