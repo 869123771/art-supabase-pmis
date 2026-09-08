@@ -1,7 +1,8 @@
-export type PmisPlanKind = 'inspection' | 'patrol'
+export type PmisPlanKind = 'inspection' | 'patrol' | 'maintenance' | 'preventive'
 export type PmisPlanFrequency = 'daily' | 'weekly' | 'tenday' | 'monthly' | 'quarterly' | 'yearly'
 export type PmisStatus = 'enabled' | 'disabled'
-export type PmisTaskStatus = 'pending' | 'completed' | 'exempt' | 'overdue'
+export type PmisTaskStatus =
+  'pending' | 'pending_confirm' | 'completed' | 'completed_overdue' | 'exempt' | 'overdue'
 
 export interface PmisDepartmentOption {
   id: string
@@ -9,6 +10,16 @@ export interface PmisDepartmentOption {
   parentId?: string | null
   departmentCode: string
   departmentName: string
+}
+
+export interface PmisDepartmentTreeOption extends PmisDepartmentOption {
+  children?: PmisDepartmentTreeOption[]
+}
+
+export interface PmisEmployeeReference {
+  id: string
+  employeeNo: string
+  employeeName: string
 }
 
 export interface PmisEquipmentOption {
@@ -53,7 +64,7 @@ export interface PmisPlan {
   items: PmisPlanItem[]
   equipmentBindings: Array<{ equipment: PmisEquipmentOption | null }>
   responsibleBindings: Array<{
-    employee: { id: string; tenantId: string; employeeNo: string; employeeName: string } | null
+    employee: (PmisEmployeeReference & { tenantId: string }) | null
   }>
 }
 
@@ -93,15 +104,23 @@ export interface PmisTask {
   taskNo: string
   plannedDate: string
   shiftName?: string | null
-  status: Exclude<PmisTaskStatus, 'overdue'>
+  status: Exclude<PmisTaskStatus, 'overdue' | 'completed_overdue'>
   displayStatus: PmisTaskStatus
   completedAt?: string | null
   executionSummary?: string | null
+  taskSource: 'scheduled' | 'manual' | 'abnormal'
+  dueDate?: string | null
+  delegatedAt?: string | null
+  beforePhotoFiles: unknown[]
+  afterPhotoFiles: unknown[]
+  delegate?: { id: string; employeeNo: string; employeeName: string } | null
+  confirmer?: { id: string; employeeNo: string; employeeName: string } | null
+  confirmedAt?: string | null
   plan: Pick<PmisPlan, 'id' | 'planKind' | 'planName' | 'requiredDays' | 'requirePhoto'> & {
     items: PmisPlanItem[]
   }
   equipment: PmisEquipmentOption
-  responsible?: { id: string; employeeNo: string; employeeName: string } | null
+  responsible?: PmisEmployeeReference | null
   results: PmisTaskResult[]
 }
 
@@ -131,7 +150,100 @@ export interface PmisTaskExecutionInput {
   taskId: string
   executorEmployeeId: string
   executionSummary?: string | null
+  beforePhotoFiles?: string[]
+  afterPhotoFiles?: string[]
   results: PmisTaskExecutionResultInput[]
+}
+
+export interface PmisTaskInput {
+  tenantId?: string
+  planId: string
+  equipmentId: string
+  plannedDate: string
+  responsibleEmployeeId?: string | null
+  taskSource?: 'scheduled' | 'manual' | 'abnormal'
+  executionSummary?: string | null
+}
+
+export type PmisSettingKind = 'maintenance' | 'repair'
+export interface PmisDepartmentSetting {
+  id: string
+  tenantId: string
+  settingKind: PmisSettingKind
+  departmentId: string
+  requireAlbumPhoto: boolean
+  notificationMethods: string[]
+  urgencyRules: Array<{ urgency: PmisRepairUrgency; requiredHours: number }>
+  department?: PmisDepartmentOption | null
+  employees: Array<{
+    role: 'responsible' | 'confirmer' | 'repairer' | 'notifier'
+    employee: PmisEmployeeReference | null
+  }>
+  escalationRules: Array<{
+    id: string
+    delayMinutes: number
+    notificationMethods: string[]
+    notifyEmployeeIds: string[]
+  }>
+}
+
+export interface PmisDepartmentSettingInput {
+  tenantId?: string
+  settingKind: PmisSettingKind
+  departmentId: string
+  requireAlbumPhoto: boolean
+  notificationMethods: string[]
+  urgencyRules: Array<{ urgency: PmisRepairUrgency; requiredHours: number }>
+  responsibleEmployeeIds: string[]
+  confirmerEmployeeIds: string[]
+  repairerEmployeeIds: string[]
+  escalationRules: Array<{
+    delayMinutes: number
+    notificationMethods: string[]
+    notifyEmployeeIds: string[]
+  }>
+}
+
+export type PmisRepairStatus =
+  'reported' | 'in_progress' | 'pending_confirm' | 'completed' | 'overdue'
+export type PmisRepairUrgency = 'normal' | 'urgent' | 'expedite' | 'emergency'
+export interface PmisRepairTask {
+  id: string
+  tenantId: string
+  workOrderNo: string
+  urgency: PmisRepairUrgency
+  faultSymptom: string
+  faultPhotoFiles: unknown[]
+  faultAnalysis?: string | null
+  faultCause?: string | null
+  solution?: string | null
+  repairPhotoFiles: unknown[]
+  status: Exclude<PmisRepairStatus, 'overdue'>
+  displayStatus: PmisRepairStatus
+  reportedAt: string
+  requiredCompleteAt?: string | null
+  completedAt?: string | null
+  confirmedAt?: string | null
+  equipment: PmisEquipmentOption
+  reporter?: PmisEmployeeReference | null
+  repairer?: PmisEmployeeReference | null
+  confirmer?: PmisEmployeeReference | null
+}
+
+export interface PmisRepairTaskInput {
+  tenantId?: string
+  equipmentId: string
+  urgency: PmisRepairUrgency
+  faultSymptom: string
+  faultPhotoFiles: string[]
+  reporterEmployeeId: string
+  repairerEmployeeId?: string | null
+  confirmerEmployeeId?: string | null
+  faultAnalysis?: string | null
+  faultCause?: string | null
+  solution?: string | null
+  repairPhotoFiles?: string[]
+  status?: Exclude<PmisRepairStatus, 'overdue'>
 }
 
 export interface PmisTaskOverview {

@@ -1,10 +1,10 @@
 <template>
   <div class="pmis-analysis art-page-view business-workspace-page art-full-height">
     <BusinessWorkspaceHeader
-      :eyebrow="kind === 'inspection' ? 'INSPECTION INSIGHT' : 'PATROL INSIGHT'"
+      :eyebrow="`${config.eyebrow} · INSIGHT`"
       :title="`${kindLabel}分析`"
       :description="`按产线与设备识别${kindLabel}缺失和延误聚集区，优先处理高风险机台。`"
-      :icon="kind === 'inspection' ? 'ri:bar-chart-box-line' : 'ri:line-chart-line'"
+      :icon="config.icon"
       :tags="[
         { label: dateCaption, type: 'primary' },
         { label: '异常优先排序', type: overdue ? 'danger' : 'success' }
@@ -88,8 +88,8 @@
           </ArtSectionCard>
 
           <ArtSectionCard
-            title="各设备缺失情况"
-            subtitle="定位经常未完成检查的具体机台"
+            :title="secondaryTitle"
+            :subtitle="secondarySubtitle"
             :loading="state.loading"
             :error="state.error"
             :empty="!state.loading && !state.error && equipment.length === 0"
@@ -99,7 +99,7 @@
             @retry="load"
           >
             <template #actions>
-              <ElTag type="primary" effect="plain" round>{{ equipment.length }} 台设备</ElTag>
+              <ElTag type="primary" effect="plain" round>{{ equipment.length }} 个对象</ElTag>
             </template>
             <div class="pmis-analysis__ranking">
               <article v-for="(item, index) in equipment" :key="item.id">
@@ -155,6 +155,8 @@
     type PmisPlanKind,
     type PmisTask
   } from '@pmis/api'
+  import { pmisKindConfig } from './business-config'
+  import { pmisAnalysisPermissions } from './business-permissions'
 
   const props = defineProps<{ kind: PmisPlanKind }>()
   interface AnalysisQuery {
@@ -172,17 +174,28 @@
     error: '',
     rows: []
   })
-  const kindLabel = computed(() => (props.kind === 'inspection' ? '点检' : '巡检'))
-  const exportPermission = computed(() =>
-    props.kind === 'inspection' ? 'PmisInspectionAnalysis:Export' : 'PmisPatrolAnalysis:Export'
-  )
+  const config = computed(() => pmisKindConfig(props.kind))
+  const kindLabel = computed(() => config.value.label)
+  const exportPermission = computed(() => pmisAnalysisPermissions[props.kind])
   const dateCaption = computed(
     () => `${query.dateRange[0] || '不限'} 至 ${query.dateRange[1] || '不限'}`
   )
   const overview = computed(() => summarizePmisTasks(state.rows))
   const overdue = computed(() => overview.value.overdue)
   const departments = computed(() => analyzePmisTasks(state.rows, 'department').slice(0, 12))
-  const equipment = computed(() => analyzePmisTasks(state.rows, 'equipment').slice(0, 12))
+  const usePeopleDimension = computed(() => ['maintenance', 'preventive'].includes(props.kind))
+  const equipment = computed(() =>
+    analyzePmisTasks(state.rows, usePeopleDimension.value ? 'responsible' : 'equipment').slice(
+      0,
+      12
+    )
+  )
+  const secondaryTitle = computed(() =>
+    usePeopleDimension.value ? '人员逾期排行' : '各设备缺失情况'
+  )
+  const secondarySubtitle = computed(() =>
+    usePeopleDimension.value ? '定位逾期任务集中的责任人员' : '定位经常未完成检查的具体机台'
+  )
   const metrics = computed<BusinessWorkspaceMetric[]>(() => [
     {
       label: '计划任务',
@@ -256,7 +269,7 @@
       }))
       .concat(
         equipment.value.map((item) => ({
-          dimension: '设备',
+          dimension: usePeopleDimension.value ? '责任人' : '设备',
           name: item.label,
           total: item.total,
           completed: item.completed,

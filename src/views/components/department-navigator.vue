@@ -70,11 +70,9 @@
   import ArtAsyncState from '@/components/core/feedback/art-async-state/index.vue'
   import ArtIconButton from '@/components/core/widget/art-icon-button/index.vue'
   import ArtSvgIcon from '@/components/core/base/art-svg-icon/index.vue'
-  import { fetchPmisDepartments, type PmisDepartmentOption } from '@pmis/api'
+  import { fetchPmisDepartmentTree, type PmisDepartmentTreeOption } from '@pmis/api'
 
-  interface TreeNode extends PmisDepartmentOption {
-    children?: TreeNode[]
-  }
+  type TreeNode = PmisDepartmentTreeOption
 
   const emit = defineEmits<{ change: [ids: string[], label: string] }>()
   const treeRef = ref<InstanceType<typeof ElTree>>()
@@ -89,7 +87,7 @@
     loading.value = true
     error.value = ''
     try {
-      tree.value = treeUtils.listToTree(await fetchPmisDepartments()) as TreeNode[]
+      tree.value = await fetchPmisDepartmentTree()
     } catch {
       error.value = '部门与产线加载失败，请重试。'
     } finally {
@@ -147,7 +145,8 @@
         }
 
         strong {
-          font-size: var(--art-font-size-section-title);
+          font-size: 16px;
+          line-height: 24px;
         }
 
         small {
@@ -159,13 +158,14 @@
     }
 
     &__all {
-      display: flex;
+      display: grid;
       flex: none;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: var(--art-space-3);
       align-items: center;
-      justify-content: space-between;
       width: 100%;
-      min-height: 40px;
-      padding: 0 var(--art-space-3);
+      min-height: 48px;
+      padding: 0 var(--art-space-3) 0 var(--art-space-4);
       font: inherit;
       color: var(--el-text-color-regular);
       cursor: pointer;
@@ -194,7 +194,11 @@
       &:hover,
       &.is-active {
         color: var(--theme-color);
-        background: color-mix(in srgb, var(--theme-color) 8%, transparent);
+        background: color-mix(in srgb, var(--theme-color) 9%, var(--default-box-color));
+      }
+
+      &.is-active {
+        box-shadow: inset 3px 0 0 var(--theme-color);
       }
     }
 
@@ -213,6 +217,7 @@
       gap: var(--art-space-2);
       align-items: center;
       min-width: 0;
+      font-size: 13px;
 
       > span {
         overflow: hidden;
@@ -222,14 +227,30 @@
     }
 
     :deep(.el-tree) {
-      min-width: 220px;
+      width: 100%;
+      min-width: 0;
       background: transparent;
     }
 
+    :deep(.el-tree-node),
+    :deep(.el-tree-node__children),
     :deep(.el-tree-node__content) {
-      min-height: 38px;
+      min-width: 0;
+    }
+
+    :deep(.el-tree-node__content > .pmis-department-navigator__node) {
+      flex: 1;
+      width: 0;
+    }
+
+    :deep(.el-tree-node__content) {
+      min-height: 42px;
       margin-bottom: 2px;
       border-radius: var(--el-border-radius-base);
+      transition:
+        color var(--art-motion-duration-fast) ease,
+        background-color var(--art-motion-duration-fast) ease,
+        box-shadow var(--art-motion-duration-fast) ease;
     }
 
     :deep(.el-tree-node__content:hover) {
@@ -239,7 +260,13 @@
     :deep(.el-tree-node.is-current > .el-tree-node__content) {
       font-weight: 600;
       color: var(--theme-color);
-      background: color-mix(in srgb, var(--theme-color) 12%, transparent);
+      background: color-mix(in srgb, var(--theme-color) 11%, var(--default-box-color));
+      box-shadow: inset 3px 0 0 var(--theme-color);
+    }
+
+    :deep(.el-tree-node__content:focus-visible) {
+      outline: 2px solid color-mix(in srgb, var(--theme-color) 55%, transparent);
+      outline-offset: -2px;
     }
   }
 </style>

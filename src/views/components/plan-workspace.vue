@@ -1,10 +1,10 @@
 <template>
   <div class="pmis-plan-workspace art-page-view business-workspace-page art-full-height">
     <BusinessWorkspaceHeader
-      :eyebrow="kind === 'inspection' ? 'INSPECTION GOVERNANCE' : 'PATROL GOVERNANCE'"
+      :eyebrow="config.eyebrow"
       :title="`${kindLabel}方案`"
       :description="description"
-      :icon="kind === 'inspection' ? 'ri:calendar-todo-line' : 'ri:route-line'"
+      :icon="config.icon"
       :tags="[
         { label: '设备主档联动', type: 'primary' },
         { label: '任务自动生成', type: 'success' },
@@ -38,15 +38,15 @@
 
     <PmisPlanDialog ref="dialogRef" @success="refresh" />
     <ArtDrawer ref="drawerRef" :title="`${kindLabel}方案详情`" size="lg">
-      <template v-if="detailRow">
+      <PmisDetailDrawerSections v-if="detailRow">
         <ArtSectionCard title="方案摘要" subtitle="执行节奏与责任范围">
           <ArtDescriptions :columns="2" :data="detailRow" :items="detailDescriptions" />
         </ArtSectionCard>
         <ArtSectionCard
-          title="检查项目"
+          :title="itemNoun"
           :subtitle="`共 ${detailRow.items.length} 项，按现场执行顺序展示`"
           :empty="detailRow.items.length === 0"
-          empty-description="该方案尚未配置检查项目。"
+          :empty-description="`该方案尚未配置${itemNoun}。`"
         >
           <ol class="pmis-plan-workspace__item-list">
             <li v-for="item in detailRow.items" :key="item.id || item.sort">
@@ -61,7 +61,7 @@
             </li>
           </ol>
         </ArtSectionCard>
-      </template>
+      </PmisDetailDrawerSections>
     </ArtDrawer>
   </div>
 </template>
@@ -101,6 +101,9 @@
     type PmisPlanKind
   } from '@pmis/api'
   import PmisPlanDialog, { type PmisPlanDialogOpenData } from './plan-dialog.vue'
+  import { pmisKindConfig } from './business-config'
+  import { pmisPlanPermissions } from './business-permissions'
+  import PmisDetailDrawerSections from './detail-drawer-sections.vue'
 
   const props = defineProps<{ kind: PmisPlanKind }>()
   interface DialogExpose {
@@ -119,33 +122,13 @@
   const detailRow = shallowRef<PmisPlan>()
   const total = ref(0)
   const rows = shallowRef<PmisPlan[]>([])
-  const kindLabel = computed(() => (props.kind === 'inspection' ? '点检' : '巡检'))
-  const permissions = computed(() =>
-    props.kind === 'inspection'
-      ? {
-          view: 'PmisInspectionPlan:View',
-          add: 'PmisInspectionPlan:Add',
-          copy: 'PmisInspectionPlan:Copy',
-          edit: 'PmisInspectionPlan:Edit',
-          delete: 'PmisInspectionPlan:Delete',
-          import: 'PmisInspectionPlan:Import',
-          export: 'PmisInspectionPlan:Export'
-        }
-      : {
-          view: 'PmisPatrolPlan:View',
-          add: 'PmisPatrolPlan:Add',
-          copy: 'PmisPatrolPlan:Copy',
-          edit: 'PmisPatrolPlan:Edit',
-          delete: 'PmisPatrolPlan:Delete',
-          import: 'PmisPatrolPlan:Import',
-          export: 'PmisPatrolPlan:Export'
-        }
+  const config = computed(() => pmisKindConfig(props.kind))
+  const kindLabel = computed(() => config.value.label)
+  const itemNoun = computed(() =>
+    ['maintenance', 'preventive'].includes(props.kind) ? '作业项目' : '检查项目'
   )
-  const description = computed(() =>
-    props.kind === 'inspection'
-      ? '维护设备每日点检标准、适用设备与判定规则，方案变更后自动重排未执行任务。'
-      : '配置巡检周期、责任人、适用设备与检查标准，形成计划—执行—追溯闭环。'
-  )
+  const permissions = computed(() => pmisPlanPermissions[props.kind])
+  const description = computed(() => config.value.description)
   const enabledCount = computed(() => rows.value.filter((row) => row.status === 'enabled').length)
   const boundEquipmentCount = computed(
     () =>
@@ -175,7 +158,7 @@
       tone: 'primary'
     },
     {
-      label: '检查项目',
+      label: itemNoun.value,
       value: itemCount.value,
       description: '当前页项目总数',
       icon: 'ri:list-check-3',
@@ -342,12 +325,12 @@
             onClick={() => void showDetail(row)}
           >
             <strong>{row.planName}</strong>
-            <small>{row.planKind === 'inspection' ? '设备点检' : '设备巡检'}</small>
+            <small>设备{pmisKindConfig(row.planKind).label}</small>
           </button>
         ) : (
           <span class="pmis-plan-workspace__link is-static">
             <strong>{row.planName}</strong>
-            <small>{row.planKind === 'inspection' ? '设备点检' : '设备巡检'}</small>
+            <small>设备{pmisKindConfig(row.planKind).label}</small>
           </span>
         )
     },
@@ -377,7 +360,7 @@
     },
     {
       prop: 'items',
-      label: '检查项',
+      label: itemNoun.value,
       width: 100,
       align: 'center',
       formatter: (row) => `${row.items.length} 项`
@@ -466,7 +449,12 @@
     detailRow.value
       ? [
           { key: 'name', label: '方案名称', value: detailRow.value.planName },
-          { key: 'frequency', label: '执行频次', value: detailRow.value.frequency },
+          {
+            key: 'frequency',
+            label: '执行频次',
+            value: detailRow.value.frequency,
+            dictCode: 'pmisPlanFrequency'
+          },
           {
             key: 'equipment',
             label: '适用设备',
@@ -498,7 +486,7 @@
 
 <style scoped lang="scss">
   .pmis-plan-workspace {
-    &__link {
+    :deep(.pmis-plan-workspace__link) {
       display: grid;
       gap: 3px;
       width: 100%;
@@ -511,6 +499,9 @@
 
       strong {
         color: var(--theme-color);
+        text-decoration: underline;
+        text-decoration-color: color-mix(in srgb, var(--theme-color) 45%, transparent);
+        text-underline-offset: 3px;
       }
 
       small {
@@ -529,9 +520,11 @@
       }
     }
 
-    &__row-actions {
+    :deep(.pmis-plan-workspace__row-actions) {
       display: flex;
+      gap: var(--art-space-1);
       align-items: center;
+      justify-content: flex-start;
     }
 
     &__item-list {

@@ -2,7 +2,7 @@
   <div class="plan-item-editor">
     <div class="plan-item-editor__toolbar">
       <div
-        ><strong>检查项目</strong
+        ><strong>{{ itemNoun }}</strong
         ><small>配置内容、要求与判定规则，拖动序号可调整执行顺序。</small></div
       >
       <ElButton type="primary" plain @click="addItem">
@@ -31,7 +31,9 @@
   import type { PmisPlanItem } from '@pmis/api'
 
   defineOptions({ name: 'PmisPlanItemEditor' })
-  const props = defineProps<{ modelValue: PmisPlanItem[] }>()
+  const props = withDefaults(defineProps<{ modelValue: PmisPlanItem[]; itemNoun?: string }>(), {
+    itemNoun: '检查项目'
+  })
   const emit = defineEmits<{ 'update:modelValue': [value: PmisPlanItem[]] }>()
   const tableRef = ref<ArtTableExpose>()
   const commit = (): void => emit('update:modelValue', [...props.modelValue])

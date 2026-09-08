@@ -98,6 +98,26 @@
           </div>
         </template>
       </ArtForm>
+      <section v-if="task.plan.planKind === 'maintenance'" class="pmis-task-execution__album">
+        <div
+          ><strong>作业前图片</strong><small>记录保养前设备状态</small
+          ><ArtUploadImage
+            v-model="form.model.beforePhotoFiles"
+            multiple
+            :limit="6"
+            :size="84"
+            title="上传作业前图片"
+        /></div>
+        <div
+          ><strong>作业后图片</strong><small>记录保养完成后的设备状态</small
+          ><ArtUploadImage
+            v-model="form.model.afterPhotoFiles"
+            multiple
+            :limit="6"
+            :size="84"
+            title="上传作业后图片"
+        /></div>
+      </section>
     </div>
   </ArtDialog>
 </template>
@@ -112,6 +132,7 @@
   import ArtUploadImage from '@/components/core/forms/art-upload-image/index.vue'
   import ArtSvgIcon from '@/components/core/base/art-svg-icon/index.vue'
   import { completePmisTask, type PmisTask, type PmisTaskExecutionResultInput } from '@pmis/api'
+  import { pmisKindConfig } from './business-config'
 
   export interface PmisTaskExecutionDialogOpenData {
     task: PmisTask
@@ -130,6 +151,8 @@
   interface ExecutionFormModel {
     executorEmployeeId: string
     executionSummary: string
+    beforePhotoFiles: string[]
+    afterPhotoFiles: string[]
     results: ExecutionResultForm[]
   }
 
@@ -147,6 +170,8 @@
     model: {
       executorEmployeeId: '',
       executionSummary: '',
+      beforePhotoFiles: [],
+      afterPhotoFiles: [],
       results: []
     },
     items: [
@@ -173,9 +198,16 @@
   const rules: FormRules<ExecutionFormModel> = {
     executorEmployeeId: [{ required: true, message: '请选择实际执行人', trigger: 'change' }]
   }
-  const kindLabel = computed(() => (task.value?.plan.planKind === 'inspection' ? '点检' : '巡检'))
+  const kindLabel = computed(() =>
+    task.value ? pmisKindConfig(task.value.plan.planKind).label : '设备'
+  )
+  const itemNoun = computed(() =>
+    task.value && ['maintenance', 'preventive'].includes(task.value.plan.planKind)
+      ? '作业项目'
+      : '检查项目'
+  )
   const taskIcon = computed(() =>
-    task.value?.plan.planKind === 'inspection' ? 'ri:task-line' : 'ri:route-line'
+    task.value ? pmisKindConfig(task.value.plan.planKind).icon : 'ri:tools-line'
   )
   const completedCount = computed(
     () => form.model.results.filter((result) => Boolean(result.resultStatus)).length
@@ -193,6 +225,12 @@
     Object.assign(form.model, {
       executorEmployeeId: value.responsible?.id || '',
       executionSummary: value.executionSummary || '',
+      beforePhotoFiles: value.beforePhotoFiles.filter(
+        (photo): photo is string => typeof photo === 'string'
+      ),
+      afterPhotoFiles: value.afterPhotoFiles.filter(
+        (photo): photo is string => typeof photo === 'string'
+      ),
       results: value.plan.items.flatMap((item) => {
         if (!item.id) return []
         const existing = existingByItem.get(item.id)
@@ -235,11 +273,11 @@
     try {
       await formRef.value?.validate()
       if (form.model.results.length !== task.value.plan.items.length) {
-        ElMessage.warning('任务检查项目不完整，请刷新页面后重试')
+        ElMessage.warning(`任务${itemNoun.value}不完整，请刷新页面后重试`)
         return false
       }
       if (!form.model.results.every(isCompleteResult)) {
-        ElMessage.warning('提交完成前请填写全部检查项目结果')
+        ElMessage.warning(`提交完成前请填写全部${itemNoun.value}结果`)
         return false
       }
       const abnormalIndex = form.model.results.findIndex(
@@ -261,6 +299,8 @@
         taskId: task.value.id,
         executorEmployeeId: form.model.executorEmployeeId,
         executionSummary: form.model.executionSummary.trim() || null,
+        beforePhotoFiles: [...form.model.beforePhotoFiles],
+        afterPhotoFiles: [...form.model.afterPhotoFiles],
         results: form.model.results.map((result) => ({
           planItemId: result.planItemId,
           resultStatus: result.resultStatus,
@@ -359,6 +399,32 @@
       gap: var(--art-space-3);
     }
 
+    &__album {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--art-space-4);
+      padding: var(--art-space-4);
+      margin-top: var(--art-space-4);
+      background: color-mix(in srgb, var(--theme-color) 4%, var(--default-box-color));
+      border: 1px solid var(--el-border-color-lighter);
+      border-radius: var(--el-border-radius-base);
+
+      > div {
+        display: grid;
+        gap: var(--art-space-2);
+        min-width: 0;
+      }
+
+      strong,
+      small {
+        display: block;
+      }
+
+      small {
+        color: var(--el-text-color-secondary);
+      }
+    }
+
     &__items article {
       min-width: 0;
       padding: var(--art-space-4);
@@ -452,7 +518,8 @@
       }
 
       &__items header,
-      &__item-fields {
+      &__item-fields,
+      &__album {
         grid-template-columns: minmax(0, 1fr);
       }
 

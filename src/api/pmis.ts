@@ -1,16 +1,23 @@
 import dayjs from 'dayjs'
 import { omit } from 'lodash-es'
 import { useSupabase } from '@/hooks'
+import TreeUtils from '@/utils/tree'
 import type {
   PmisAnalysisItem,
   PmisDepartmentOption,
+  PmisDepartmentTreeOption,
+  PmisDepartmentSetting,
+  PmisDepartmentSettingInput,
   PmisEquipmentOption,
   PmisPageQuery,
   PmisPlan,
   PmisPlanInput,
   PmisPlanKind,
+  PmisRepairTask,
+  PmisRepairTaskInput,
   PmisTask,
   PmisTaskExecutionInput,
+  PmisTaskInput,
   PmisTaskOverview,
   PmisTaskStatus
 } from './types'
@@ -27,12 +34,15 @@ const equipmentSelect = `
 
 const taskSelect = `
   id, tenant_id, task_no, planned_date, shift_name, status, completed_at, execution_summary,
+  task_source, due_date, delegated_at, before_photo_files, after_photo_files, confirmed_at,
   plan:pmis_plan!pmis_task_plan_fkey!inner(
     id, plan_kind, plan_name, required_days, require_photo,
     items:pmis_plan_item(id,item_name,requirement,judgment_rule,require_photo,sort)
   ),
   equipment:mdm_equipment!pmis_task_equipment_fkey!inner(${equipmentSelect}),
   responsible:mdm_employee!pmis_task_employee_fkey(id, employee_no, employee_name),
+  delegate:mdm_employee!pmis_task_delegate_employee_fkey(id, employee_no, employee_name),
+  confirmer:mdm_employee!pmis_task_confirmer_employee_fkey(id, employee_no, employee_name),
   results:pmis_task_result(
     id, result_status, result_value, photo_files, inspected_at, remark,
     item:pmis_plan_item!pmis_task_result_item_fkey(id, item_name, requirement, judgment_rule, require_photo, sort),
@@ -40,10 +50,17 @@ const taskSelect = `
   )
 `
 
-const displayStatus = (task: Pick<PmisTask, 'status' | 'plannedDate'>): PmisTaskStatus =>
+const displayStatus = (
+  task: Pick<PmisTask, 'status' | 'plannedDate' | 'completedAt' | 'dueDate'>
+): PmisTaskStatus =>
   task.status === 'pending' && dayjs(task.plannedDate).isBefore(dayjs(), 'day')
     ? 'overdue'
-    : task.status
+    : task.status === 'completed' &&
+        task.completedAt &&
+        task.dueDate &&
+        dayjs(task.completedAt).isAfter(dayjs(task.dueDate), 'day')
+      ? 'completed_overdue'
+      : task.status
 
 const normalizeTask = (task: PmisTask): PmisTask => ({
   ...task,
@@ -62,6 +79,20 @@ export async function fetchPmisDepartments(): Promise<PmisDepartmentOption[]> {
     { showErrorMessage: true, errorMessage: '部门与产线加载失败，请重试' }
   )
   return result.data ?? []
+}
+
+export async function fetchPmisDepartmentTree(
+  tenantId?: string
+): Promise<PmisDepartmentTreeOption[]> {
+  const departments = (await fetchPmisDepartments()).filter(
+    (department) => !tenantId || department.tenantId === tenantId
+  )
+  const treeUtils = new TreeUtils({
+    idKey: 'id',
+    parentKey: 'parentId',
+    childrenKey: 'children'
+  })
+  return treeUtils.listToTree(departments) as PmisDepartmentTreeOption[]
 }
 
 export async function fetchPmisEquipmentOptions(params: PmisPageQuery = {}) {
@@ -113,7 +144,7 @@ export async function fetchPmisPlans(kind: PmisPlanKind, params: PmisPageQuery =
   if (params.status) query = query.eq('status', params.status)
   const result = await responseHandle<PmisPlan[]>(() => query, {
     showErrorMessage: true,
-    errorMessage: `${kind === 'inspection' ? '点检' : '巡检'}方案加载失败，请重试`
+    errorMessage: `${planKindLabel(kind)}方案加载失败，请重试`
   })
   return { data: result.data ?? [], total: result.total ?? 0 }
 }
@@ -172,7 +203,7 @@ export async function fetchPmisTasks(kind: PmisPlanKind, params: PmisPageQuery =
   else if (params.status) query = query.eq('status', params.status)
   const result = await responseHandle<PmisTask[]>(() => query, {
     showErrorMessage: true,
-    errorMessage: `${kind === 'inspection' ? '点检' : '巡检'}任务加载失败，请重试`
+    errorMessage: `${planKindLabel(kind)}任务加载失败，请重试`
   })
   let rows = (result.data ?? []).map(normalizeTask)
   if (params.departmentId)
@@ -181,6 +212,180 @@ export async function fetchPmisTasks(kind: PmisPlanKind, params: PmisPageQuery =
     data: rows,
     total: params.departmentId ? rows.length : (result.total ?? 0)
   }
+}
+
+export const planKindLabel = (kind: PmisPlanKind): string =>
+  ({ inspection: '点检', patrol: '巡检', maintenance: '保养', preventive: '预防维修' })[kind]
+
+export async function savePmisTask(input: PmisTaskInput, id?: string): Promise<void> {
+  await responseHandle<string>(
+    () =>
+      supabase.rpc('pmis_save_task_secure', {
+        p_id: id ?? null,
+        p_payload: keysToSnakeDeep(input)
+      }),
+    {
+      breakReturn: true,
+      showMessage: true,
+      showErrorMessage: true,
+      message: id ? '任务已更新' : '任务已创建',
+      errorMessage: '任务保存失败，请检查方案、设备和负责人'
+    }
+  )
+}
+
+export async function deletePmisTasks(ids: string[], kind: PmisPlanKind): Promise<void> {
+  await responseHandle<number>(
+    () => supabase.rpc('pmis_delete_tasks_secure', { p_ids: ids, p_kind: kind }),
+    {
+      breakReturn: true,
+      showMessage: true,
+      showErrorMessage: true,
+      message: '任务已删除',
+      errorMessage: '任务删除失败，仅未执行任务可删除'
+    }
+  )
+}
+
+export async function confirmPmisTask(taskId: string): Promise<void> {
+  await responseHandle<string>(
+    () => supabase.rpc('pmis_confirm_task_secure', { p_task_id: taskId }),
+    {
+      breakReturn: true,
+      showMessage: true,
+      showErrorMessage: true,
+      message: '保养结果已确认',
+      errorMessage: '确认失败，请检查权限和任务状态'
+    }
+  )
+}
+
+export async function fetchPmisDepartmentSettings(
+  kind: 'maintenance' | 'repair',
+  params: PmisPageQuery = {}
+) {
+  let query = supabase
+    .from('pmis_department_setting')
+    .select(
+      `*,department:mdm_production_department!pmis_department_setting_department_fkey(id,tenant_id,parent_id,department_code:code,department_name:name),employees:pmis_department_setting_employee(role,employee:mdm_employee!pmis_department_setting_employee_employee_fkey(id,employee_no,employee_name)),escalation_rules:pmis_escalation_rule(id,delay_minutes,notification_methods,notify_employee_ids)`,
+      { count: 'exact' }
+    )
+    .eq('setting_kind', kind)
+    .order('update_time', { ascending: false })
+  if (params.departmentId) query = query.eq('department_id', params.departmentId)
+  if (params.departmentIds?.length) query = query.in('department_id', params.departmentIds)
+  const result = await responseHandle<PmisDepartmentSetting[]>(() => query, {
+    showErrorMessage: true,
+    errorMessage: '部门设置加载失败，请重试'
+  })
+  return { data: result.data ?? [], total: result.total ?? 0 }
+}
+
+export async function savePmisDepartmentSetting(
+  input: PmisDepartmentSettingInput,
+  id?: string
+): Promise<void> {
+  await responseHandle<string>(
+    () =>
+      supabase.rpc('pmis_save_department_setting_secure', {
+        p_id: id ?? null,
+        p_payload: keysToSnakeDeep(input)
+      }),
+    {
+      breakReturn: true,
+      showMessage: true,
+      showErrorMessage: true,
+      message: '部门设置已保存',
+      errorMessage: '部门设置保存失败'
+    }
+  )
+}
+
+export async function deletePmisDepartmentSettings(
+  ids: string[],
+  kind: 'maintenance' | 'repair'
+): Promise<void> {
+  await responseHandle<number>(
+    () => supabase.rpc('pmis_delete_department_settings_secure', { p_ids: ids, p_kind: kind }),
+    {
+      breakReturn: true,
+      showMessage: true,
+      showErrorMessage: true,
+      message: '部门设置已删除',
+      errorMessage: '部门设置删除失败'
+    }
+  )
+}
+
+const repairSelect = `id,tenant_id,work_order_no,urgency,fault_symptom,fault_photo_files,fault_analysis,fault_cause,solution,repair_photo_files,status,reported_at,required_complete_at,completed_at,confirmed_at,equipment:mdm_equipment!pmis_repair_task_equipment_fkey!inner(${equipmentSelect}),reporter:mdm_employee!pmis_repair_task_reporter_fkey(id,employee_no,employee_name),repairer:mdm_employee!pmis_repair_task_repairer_fkey(id,employee_no,employee_name),confirmer:mdm_employee!pmis_repair_task_confirmer_fkey(id,employee_no,employee_name)`
+
+export async function fetchPmisRepairTasks(params: PmisPageQuery = {}) {
+  const from = Math.max(((params.current ?? 1) - 1) * (params.size ?? 20), 0)
+  let query = supabase
+    .from('pmis_repair_task')
+    .select(repairSelect, { count: 'exact' })
+    .order('reported_at', { ascending: false })
+    .range(from, from + (params.size ?? 20) - 1)
+  if (params.keyword?.trim())
+    query = query.or(
+      `work_order_no.ilike.%${params.keyword.trim()}%,fault_symptom.ilike.%${params.keyword.trim()}%`
+    )
+  if (params.equipmentId) query = query.eq('equipment_id', params.equipmentId)
+  if (params.dateFrom) query = query.gte('reported_at', `${params.dateFrom}T00:00:00`)
+  if (params.dateTo) query = query.lte('reported_at', `${params.dateTo}T23:59:59`)
+  if (params.status === 'overdue')
+    query = query.neq('status', 'completed').lt('required_complete_at', new Date().toISOString())
+  else if (params.status) query = query.eq('status', params.status)
+  const result = await responseHandle<PmisRepairTask[]>(() => query, {
+    showErrorMessage: true,
+    errorMessage: '维修工单加载失败，请重试'
+  })
+  let rows = (result.data ?? []).map((row) => ({
+    ...row,
+    displayStatus:
+      row.status !== 'completed' &&
+      row.requiredCompleteAt &&
+      dayjs(row.requiredCompleteAt).isBefore(dayjs())
+        ? ('overdue' as const)
+        : row.status
+  }))
+  if (params.departmentIds?.length)
+    rows = rows.filter(
+      (row) =>
+        row.equipment?.productionDepartmentId &&
+        params.departmentIds?.includes(row.equipment.productionDepartmentId)
+    )
+  return { data: rows, total: params.departmentIds?.length ? rows.length : (result.total ?? 0) }
+}
+
+export async function savePmisRepairTask(input: PmisRepairTaskInput, id?: string): Promise<void> {
+  await responseHandle<string>(
+    () =>
+      supabase.rpc('pmis_save_repair_task_secure', {
+        p_id: id ?? null,
+        p_payload: keysToSnakeDeep(input)
+      }),
+    {
+      breakReturn: true,
+      showMessage: true,
+      showErrorMessage: true,
+      message: id ? '维修工单已更新' : '维修工单已创建',
+      errorMessage: '维修工单保存失败'
+    }
+  )
+}
+
+export async function deletePmisRepairTasks(ids: string[]): Promise<void> {
+  await responseHandle<number>(
+    () => supabase.rpc('pmis_delete_repair_tasks_secure', { p_ids: ids }),
+    {
+      breakReturn: true,
+      showMessage: true,
+      showErrorMessage: true,
+      message: '维修工单已删除',
+      errorMessage: '维修工单删除失败'
+    }
+  )
 }
 
 export async function completePmisTask(input: PmisTaskExecutionInput): Promise<void> {
@@ -221,11 +426,18 @@ export function summarizePmisTasks(tasks: PmisTask[]): PmisTaskOverview {
   }
 }
 
-export function analyzePmisTasks(tasks: PmisTask[], dimension: 'department' | 'equipment') {
+export function analyzePmisTasks(
+  tasks: PmisTask[],
+  dimension: 'department' | 'equipment' | 'responsible'
+) {
   const groups = new Map<string, PmisTask[]>()
   tasks.forEach((task) => {
     const key =
-      dimension === 'department' ? task.equipment.department?.id || 'unassigned' : task.equipment.id
+      dimension === 'department'
+        ? task.equipment.department?.id || 'unassigned'
+        : dimension === 'responsible'
+          ? task.responsible?.id || 'unassigned'
+          : task.equipment.id
     groups.set(key, [...(groups.get(key) ?? []), task])
   })
   return [...groups.entries()]
@@ -237,11 +449,15 @@ export function analyzePmisTasks(tasks: PmisTask[], dimension: 'department' | 'e
         label:
           dimension === 'department'
             ? equipment?.department?.departmentName || '未分配产线'
-            : equipment?.equipmentName || '未知设备',
+            : dimension === 'responsible'
+              ? rows[0]?.responsible?.employeeName || '未分配人员'
+              : equipment?.equipmentName || '未知设备',
         description:
           dimension === 'department'
             ? `${new Set(rows.map((row) => row.equipment.id)).size} 台设备`
-            : equipment?.equipmentCode,
+            : dimension === 'responsible'
+              ? rows[0]?.responsible?.employeeNo
+              : equipment?.equipmentCode,
         ...overview
       }
     })

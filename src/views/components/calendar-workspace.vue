@@ -1,14 +1,14 @@
 <template>
   <div class="pmis-calendar art-page-view business-workspace-page art-full-height">
     <BusinessWorkspaceHeader
-      eyebrow="DAILY INSPECTION"
-      :title="mode === 'sheet' ? '点检表' : '点检明细表'"
+      :eyebrow="config.eyebrow"
+      :title="mode === 'sheet' ? `${kindLabel}表` : `${kindLabel}明细表`"
       :description="
         mode === 'sheet'
-          ? '按月查看每台设备每日点检状态，未检与延误在同一矩阵中清晰暴露。'
-          : '按设备追溯方案项目每日完成情况，项目状态可继续下钻查看任务结果。'
+          ? `按月查看每台设备每日${kindLabel}状态，未完成与延误在同一矩阵中清晰暴露。`
+          : `按设备追溯方案项目每日完成情况，${kindLabel}状态可继续下钻查看任务结果。`
       "
-      :icon="mode === 'sheet' ? 'ri:file-list-3-line' : 'ri:table-view'"
+      :icon="mode === 'sheet' ? config.icon : 'ri:table-view'"
       :tags="[
         { label: monthCaption, type: 'primary' },
         { label: departmentLabel, type: 'info' },
@@ -21,7 +21,7 @@
           v-auth="exportPermission"
           :data="exportRows"
           :columns="exportColumns"
-          :filename="mode === 'sheet' ? '设备点检表' : '点检明细表'"
+          :filename="mode === 'sheet' ? `设备${kindLabel}表` : `${kindLabel}明细表`"
           :sheet-name="monthCaption"
           button-text="导出"
           type="warning"
@@ -35,9 +35,9 @@
 
     <section class="pmis-calendar__body">
       <ArtWorkspaceSplitter
-        primary-size="256px"
-        primary-min="224px"
-        primary-max="360px"
+        primary-size="288px"
+        primary-min="248px"
+        primary-max="400px"
         :breakpoint="900"
         stacked-primary-size="300px"
       >
@@ -58,51 +58,59 @@
           />
           <ArtSectionCard
             root-class="pmis-calendar__matrix-card"
-            :title="mode === 'sheet' ? '设备日历矩阵' : '点检项目日历矩阵'"
+            :title="mode === 'sheet' ? '设备日历矩阵' : `${kindLabel}项目日历矩阵`"
             :subtitle="matrixSubtitle"
             :loading="state.loading"
             :error="state.error"
             :empty="!state.loading && !state.error && matrixRows.length === 0"
             :empty-title="
-              mode === 'detail' && !query.equipmentId ? '请先选择设备' : '当前范围暂无点检任务'
+              mode === 'detail' && !query.equipmentId
+                ? '请先选择设备'
+                : `当前范围暂无${kindLabel}任务`
             "
             :empty-description="
               mode === 'detail' && !query.equipmentId
-                ? '选择一台设备后查看各点检项目的每日完成情况。'
-                : '请确认已启用点检方案并绑定适用设备。'
+                ? `选择一台设备后查看各${kindLabel}项目的每日完成情况。`
+                : `请确认已启用${kindLabel}方案并绑定适用设备。`
             "
             :min-height="0"
             @retry="load"
           >
-            <div class="pmis-calendar__legend" aria-label="点检状态图例">
-              <span class="is-completed">已检</span><span class="is-pending">未检</span>
-              <span class="is-overdue">延误</span><span class="is-exempt">免检</span
-              ><span>空白：未安排</span>
-            </div>
+            <template #actions>
+              <div class="pmis-calendar__legend" :aria-label="`${kindLabel}状态图例`">
+                <span class="is-completed">{{ completedLabel }}</span>
+                <span class="is-review">待确认</span>
+                <span class="is-pending">{{ pendingLabel }}</span>
+                <span class="is-overdue">延误 / 逾期完成</span>
+                <span class="is-exempt">{{ exemptLabel }}</span>
+                <span class="is-empty">未安排</span>
+              </div>
+            </template>
             <ArtTable
+              class="pmis-calendar__matrix"
               :data="matrixRows"
               :columns="columns"
               :pagination="false"
               :show-table-header="true"
               max-height="520"
-              empty-text="暂无点检任务"
+              :empty-text="`暂无${kindLabel}任务`"
             />
           </ArtSectionCard>
         </main>
       </ArtWorkspaceSplitter>
     </section>
 
-    <ArtDrawer ref="drawerRef" title="点检任务明细" size="lg">
-      <template v-if="detailTask">
+    <ArtDrawer ref="drawerRef" :title="`${kindLabel}任务明细`" size="lg">
+      <PmisDetailDrawerSections v-if="detailTask">
         <ArtSectionCard title="任务摘要" subtitle="计划、设备与当前执行状态">
           <template #actions>
             <ElButton
               v-if="mode === 'sheet' && detailTask.status === 'pending'"
-              v-auth="'PmisInspectionSheet:Execute'"
+              v-auth="executePermission"
               type="primary"
               @click="openExecution(detailTask)"
             >
-              <ArtSvgIcon icon="ri:play-circle-line" />执行点检
+              <ArtSvgIcon icon="ri:play-circle-line" />执行{{ kindLabel }}
             </ElButton>
           </template>
           <ArtDescriptions :columns="2" :data="detailTask" :items="taskDescriptions" />
@@ -116,7 +124,7 @@
           <div class="pmis-calendar__results">
             <article v-for="result in detailTask.results" :key="result.id">
               <div
-                ><strong>{{ result.item?.itemName || '检查项目' }}</strong
+                ><strong>{{ result.item?.itemName || itemNoun }}</strong
                 ><small>{{ result.item?.requirement || '—' }}</small></div
               >
               <ArtDictDisplay
@@ -127,7 +135,7 @@
             </article>
           </div>
         </ArtSectionCard>
-      </template>
+      </PmisDetailDrawerSections>
     </ArtDrawer>
     <PmisTaskExecutionDialog ref="executionRef" @success="handleExecutionSuccess" />
   </div>
@@ -135,6 +143,7 @@
 
 <script setup lang="tsx">
   import dayjs from 'dayjs'
+  import { ElTooltip } from 'element-plus'
   import ArtDescriptions from '@/components/core/base/art-descriptions/index.vue'
   import ArtDictDisplay from '@/components/core/base/art-dict-display/index.vue'
   import ArtDrawer from '@/components/core/drawers/art-drawer/index.vue'
@@ -160,14 +169,27 @@
     type PmisEquipmentOption,
     type PmisPlanItem,
     type PmisTask,
-    type PmisTaskStatus
+    type PmisTaskStatus,
+    type PmisPlanKind
   } from '@pmis/api'
   import PmisDepartmentNavigator from './department-navigator.vue'
   import PmisTaskExecutionDialog, {
     type PmisTaskExecutionDialogOpenData
   } from './task-execution-dialog.vue'
+  import { pmisKindConfig } from './business-config'
+  import { resolvePmisCalendarPermissions } from './business-permissions'
+  import PmisDetailDrawerSections from './detail-drawer-sections.vue'
 
-  const props = defineProps<{ mode: 'sheet' | 'detail' }>()
+  const props = withDefaults(defineProps<{ mode: 'sheet' | 'detail'; kind?: PmisPlanKind }>(), {
+    kind: 'inspection'
+  })
+  const config = computed(() => pmisKindConfig(props.kind))
+  const kindLabel = computed(() => config.value.label)
+  const isInspectionKind = computed(() => ['inspection', 'patrol'].includes(props.kind))
+  const completedLabel = computed(() => (isInspectionKind.value ? '已检' : '已完成'))
+  const pendingLabel = computed(() => (isInspectionKind.value ? '未检' : '未完成'))
+  const exemptLabel = computed(() => (isInspectionKind.value ? '免检' : '免执行'))
+  const itemNoun = computed(() => (isInspectionKind.value ? '检查项目' : '作业项目'))
   const { hasAuth } = useAuth()
   interface CalendarQuery {
     month: string
@@ -200,12 +222,10 @@
     handleOpen: (data: PmisTaskExecutionDialogOpenData) => Promise<void>
   }>()
   const detailTask = shallowRef<PmisTask>()
-  const exportPermission = computed(() =>
-    props.mode === 'sheet' ? 'PmisInspectionSheet:Export' : 'PmisInspectionDetail:Export'
-  )
-  const viewPermission = computed(() =>
-    props.mode === 'sheet' ? 'PmisInspectionSheet:ViewDetail' : 'PmisInspectionDetail:ViewDetail'
-  )
+  const permissions = computed(() => resolvePmisCalendarPermissions(props.kind, props.mode))
+  const exportPermission = computed(() => permissions.value.export)
+  const viewPermission = computed(() => permissions.value.view)
+  const executePermission = computed(() => permissions.value.execute ?? '')
   const monthCaption = computed(() => dayjs(`${query.month}-01`).format('YYYY年MM月'))
   const monthStart = computed(() => dayjs(`${query.month}-01`).startOf('month'))
   const monthEnd = computed(() => monthStart.value.endOf('month'))
@@ -223,14 +243,14 @@
       icon: 'ri:calendar-line'
     },
     {
-      label: '已检',
+      label: completedLabel.value,
       value: overview.value.completed,
       description: `完成率 ${overview.value.completionRate}%`,
       icon: 'ri:checkbox-circle-line',
       tone: 'success'
     },
     {
-      label: '未检',
+      label: pendingLabel.value,
       value: overview.value.pending,
       description: '尚未到期',
       icon: 'ri:time-line',
@@ -239,7 +259,7 @@
     {
       label: '延误',
       value: overview.value.overdue,
-      description: '需优先补检',
+      description: isInspectionKind.value ? '需优先补检' : '需优先处理',
       icon: 'ri:alarm-warning-line',
       tone: overview.value.overdue ? 'danger' : 'info'
     }
@@ -278,7 +298,9 @@
   ])
   const statusWeight: Record<PmisTaskStatus, number> = {
     overdue: 4,
+    completed_overdue: 3,
     pending: 3,
+    pending_confirm: 3,
     completed: 2,
     exempt: 1
   }
@@ -321,7 +343,7 @@
       id,
       item: value.item,
       identity: value.item.itemName,
-      secondary: `${value.item.requirement}（${filtered.find((task) => task.plan.items.some((item) => item.id === value.item.id))?.plan.planName || '点检方案'}）`,
+      secondary: `${value.item.requirement}（${filtered.find((task) => task.plan.items.some((item) => item.id === value.item.id))?.plan.planName || `${kindLabel.value}方案`}）`,
       tasksByDate: Object.fromEntries(
         days.value.map((date) => [
           date,
@@ -345,21 +367,53 @@
     drawerRef.value?.handleClose()
     void load()
   }
+  const statusLabel = (status: PmisTaskStatus): string => {
+    const labels: Record<PmisTaskStatus, string> = {
+      pending: pendingLabel.value,
+      pending_confirm: '待确认',
+      completed: completedLabel.value,
+      completed_overdue: '逾期完成',
+      exempt: exemptLabel.value,
+      overdue: '已延误'
+    }
+    return labels[status]
+  }
+  const statusMark = (status: PmisTaskStatus): string => {
+    if (status === 'completed' || status === 'completed_overdue') return '✓'
+    if (status === 'pending_confirm') return '待'
+    if (status === 'overdue') return '!'
+    return status === 'exempt' ? '免' : '•'
+  }
+  const statusTooltip = (task: PmisTask, actionable: boolean): string =>
+    `${dayjs(task.plannedDate).format('YYYY年MM月DD日')} · ${statusLabel(task.displayStatus)}${
+      actionable ? ' · 点击查看任务明细' : ''
+    }`
   const cell = (task?: PmisTask) =>
     task && hasAuth(viewPermission.value) ? (
-      <button
-        type="button"
-        class={['pmis-calendar__status', `is-${task.displayStatus}`]}
-        title={`${task.plannedDate} · 查看任务明细`}
-        aria-label={`${task.plannedDate} ${task.displayStatus}，查看明细`}
-        onClick={() => void showTask(task)}
-      >
-        {task.displayStatus === 'completed' ? '✓' : task.displayStatus === 'exempt' ? '免' : '•'}
-      </button>
+      <ElTooltip content={statusTooltip(task, true)} placement="top" showAfter={180} hideAfter={80}>
+        <button
+          type="button"
+          class={['pmis-calendar__status', `is-${task.displayStatus}`]}
+          aria-label={`${task.plannedDate} ${statusLabel(task.displayStatus)}，查看明细`}
+          onClick={() => void showTask(task)}
+        >
+          {statusMark(task.displayStatus)}
+        </button>
+      </ElTooltip>
     ) : task ? (
-      <span class={['pmis-calendar__status', 'is-readonly', `is-${task.displayStatus}`]}>
-        {task.displayStatus === 'completed' ? '✓' : task.displayStatus === 'exempt' ? '免' : '•'}
-      </span>
+      <ElTooltip
+        content={statusTooltip(task, false)}
+        placement="top"
+        showAfter={180}
+        hideAfter={80}
+      >
+        <span
+          class={['pmis-calendar__status', 'is-readonly', `is-${task.displayStatus}`]}
+          aria-label={`${task.plannedDate} ${statusLabel(task.displayStatus)}`}
+        >
+          {statusMark(task.displayStatus)}
+        </span>
+      </ElTooltip>
     ) : (
       <span class="pmis-calendar__empty-cell">—</span>
     )
@@ -367,21 +421,28 @@
     { type: 'globalIndex', label: '序号', width: 66, fixed: 'left' },
     {
       prop: 'identity',
-      label: props.mode === 'sheet' ? '设备' : '点检项目',
-      minWidth: props.mode === 'sheet' ? 190 : 260,
+      label: props.mode === 'sheet' ? '设备' : `${kindLabel.value}项目`,
+      minWidth: props.mode === 'sheet' ? 220 : 280,
       fixed: 'left',
       formatter: (row) => (
         <div class="pmis-calendar__identity">
-          <strong>{row.identity}</strong>
-          <small title={row.secondary}>{row.secondary}</small>
+          <span class="pmis-calendar__identity-icon">
+            <ArtSvgIcon icon={props.mode === 'sheet' ? 'ri:dashboard-3-line' : config.value.icon} />
+          </span>
+          <span class="pmis-calendar__identity-copy">
+            <strong title={row.identity}>{row.identity}</strong>
+            <small title={row.secondary}>{row.secondary}</small>
+          </span>
         </div>
       )
     },
     ...days.value.map((date): ColumnOption<MatrixRow> => ({
       prop: date,
       label: dayjs(date).format('DD'),
-      width: 48,
+      width: 52,
       align: 'center',
+      className: 'pmis-calendar__day-cell',
+      showOverflowTooltip: false,
       formatter: (row) => cell(row.tasksByDate[date])
     }))
   ])
@@ -392,7 +453,7 @@
     state.loading = true
     state.error = ''
     try {
-      state.tasks = await fetchPmisTaskSnapshot('inspection', {
+      state.tasks = await fetchPmisTaskSnapshot(props.kind, {
         dateFrom: monthStart.value.format('YYYY-MM-DD'),
         dateTo: monthEnd.value.format('YYYY-MM-DD'),
         departmentIds: departmentIds.value,
@@ -401,7 +462,7 @@
       if (query.shiftName)
         state.tasks = state.tasks.filter((task) => task.shiftName === query.shiftName)
     } catch {
-      state.error = '点检日历加载失败，请重试。'
+      state.error = `${kindLabel.value}日历加载失败，请重试。`
     } finally {
       state.loading = false
     }
@@ -422,14 +483,14 @@
       ...Object.fromEntries(
         days.value.map((date) => [
           dayjs(date).format('MM-DD'),
-          row.tasksByDate[date]?.displayStatus || '未安排'
+          row.tasksByDate[date] ? statusLabel(row.tasksByDate[date].displayStatus) : '未安排'
         ])
       )
     }))
   )
   const exportColumns = computed(() => ({
-    identity: { title: props.mode === 'sheet' ? '设备名称' : '点检项目', width: 24 },
-    secondary: { title: props.mode === 'sheet' ? '设备编号' : '点检要求', width: 32 },
+    identity: { title: props.mode === 'sheet' ? '设备名称' : `${kindLabel.value}项目`, width: 24 },
+    secondary: { title: props.mode === 'sheet' ? '设备编号' : `${kindLabel.value}要求`, width: 32 },
     ...Object.fromEntries(
       days.value.map((date) => [
         dayjs(date).format('MM-DD'),
@@ -441,7 +502,12 @@
     detailTask.value
       ? [
           { key: 'taskNo', label: '任务单号', value: detailTask.value.taskNo },
-          { key: 'status', label: '点检状态', value: detailTask.value.displayStatus },
+          {
+            key: 'status',
+            label: `${kindLabel.value}状态`,
+            value: detailTask.value.displayStatus,
+            dictCode: 'pmisTaskStatus'
+          },
           {
             key: 'equipment',
             label: '设备',
@@ -452,7 +518,7 @@
             label: '部门 / 产线',
             value: detailTask.value.equipment.department?.departmentName || '待分配'
           },
-          { key: 'plan', label: '点检方案', value: detailTask.value.plan.planName },
+          { key: 'plan', label: `${kindLabel.value}方案`, value: detailTask.value.plan.planName },
           { key: 'date', label: '计划日期', value: detailTask.value.plannedDate }
         ]
       : []
@@ -497,7 +563,16 @@
       :deep(.art-section-card__body) {
         display: flex;
         flex: 1 1 0;
+        flex-direction: column;
         min-height: 0 !important;
+      }
+
+      :deep(.art-section-card__header) {
+        gap: var(--art-space-4);
+        align-items: center;
+        padding-bottom: var(--art-space-3);
+        margin-bottom: 0;
+        border-bottom: 1px solid var(--el-border-color-lighter);
       }
 
       :deep(.art-async-state__empty) {
@@ -512,9 +587,8 @@
     &__legend {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px 14px;
+      gap: 6px 12px;
       align-items: center;
-      margin-bottom: 12px;
       font-size: 12px;
       color: var(--el-text-color-secondary);
     }
@@ -541,6 +615,10 @@
       background: var(--el-color-warning);
     }
 
+    &__legend .is-review::before {
+      background: var(--theme-color);
+    }
+
     &__legend .is-overdue::before {
       background: var(--el-color-danger);
     }
@@ -549,22 +627,80 @@
       background: var(--el-text-color-placeholder);
     }
 
-    &__identity strong,
-    &__identity small {
-      display: block;
+    &__legend .is-empty::before {
+      background: transparent;
+      border: 1px solid var(--el-border-color);
     }
 
-    &__identity small {
-      max-width: 220px;
-      margin-top: 3px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      font-size: 11px;
-      color: var(--el-text-color-secondary);
-      white-space: nowrap;
+    &__matrix {
+      flex: 1 1 0;
+      min-width: 0;
+      min-height: 0;
+
+      :deep(.el-table) {
+        margin-top: var(--art-space-3);
+      }
+
+      :deep(.el-table__header-wrapper th.el-table__cell) {
+        height: 44px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      :deep(.el-table__row td.el-table__cell) {
+        height: 52px;
+      }
+
+      :deep(.el-table__fixed),
+      :deep(.el-table__fixed-right) {
+        box-shadow: 8px 0 18px rgb(15 23 42 / 5%);
+      }
+
+      :deep(.el-scrollbar__bar.is-horizontal) {
+        height: 8px;
+      }
     }
 
-    &__status {
+    :deep(.pmis-calendar__identity) {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    :deep(.pmis-calendar__identity-icon) {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      color: var(--theme-color);
+      background: color-mix(in srgb, var(--theme-color) 9%, var(--default-box-color));
+      border-radius: var(--el-border-radius-base);
+    }
+
+    :deep(.pmis-calendar__identity-copy) {
+      display: grid;
+      min-width: 0;
+
+      strong,
+      small {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      strong {
+        color: var(--el-text-color-primary);
+      }
+
+      small {
+        margin-top: 2px;
+        font-size: 11px;
+        color: var(--el-text-color-secondary);
+      }
+    }
+
+    :deep(.pmis-calendar__status) {
       display: inline-grid;
       place-items: center;
       width: 28px;
@@ -575,42 +711,72 @@
       cursor: pointer;
       border: 1px solid transparent;
       border-radius: 50%;
+      transition:
+        color var(--art-motion-duration-fast) ease,
+        background-color var(--art-motion-duration-fast) ease,
+        border-color var(--art-motion-duration-fast) ease,
+        transform var(--art-motion-duration-fast) ease;
     }
 
-    &__status.is-completed {
+    :deep(.pmis-calendar__day-cell .cell) {
+      display: grid;
+      place-items: center;
+      padding: 0 6px;
+      overflow: visible;
+      text-overflow: clip;
+    }
+
+    :deep(.pmis-calendar__status:not(.is-readonly):hover) {
+      transform: translateY(-1px) scale(1.06);
+    }
+
+    :deep(.pmis-calendar__status.is-completed) {
       color: var(--el-color-success);
       background: var(--el-color-success-light-9);
       border-color: var(--el-color-success-light-7);
     }
 
-    &__status.is-pending {
+    :deep(.pmis-calendar__status.is-pending) {
       color: var(--el-color-warning);
       background: var(--el-color-warning-light-9);
       border-color: var(--el-color-warning-light-7);
     }
 
-    &__status.is-overdue {
+    :deep(.pmis-calendar__status.is-pending_confirm) {
+      font-size: 11px;
+      color: var(--theme-color);
+      background: color-mix(in srgb, var(--theme-color) 9%, var(--default-box-color));
+      border-color: color-mix(in srgb, var(--theme-color) 24%, var(--el-border-color));
+    }
+
+    :deep(.pmis-calendar__status.is-overdue) {
       color: var(--el-color-danger);
       background: var(--el-color-danger-light-9);
       border-color: var(--el-color-danger-light-7);
     }
 
-    &__status.is-exempt {
+    :deep(.pmis-calendar__status.is-completed_overdue) {
+      color: var(--el-color-danger);
+      background: var(--el-color-danger-light-9);
+      border-color: var(--el-color-danger-light-7);
+    }
+
+    :deep(.pmis-calendar__status.is-exempt) {
       color: var(--el-text-color-secondary);
       background: var(--art-gray-100);
       border-color: var(--el-border-color);
     }
 
-    &__status:focus-visible {
+    :deep(.pmis-calendar__status:focus-visible) {
       outline: 2px solid color-mix(in srgb, var(--theme-color) 55%, transparent);
       outline-offset: 2px;
     }
 
-    &__status.is-readonly {
+    :deep(.pmis-calendar__status.is-readonly) {
       cursor: default;
     }
 
-    &__empty-cell {
+    :deep(.pmis-calendar__empty-cell) {
       color: var(--el-text-color-placeholder);
     }
 
@@ -638,6 +804,26 @@
     &__results small {
       margin-top: 3px;
       color: var(--el-text-color-secondary);
+    }
+
+    @media (width <= 1120px) {
+      &__matrix-card :deep(.art-section-card__header) {
+        align-items: flex-start;
+      }
+
+      &__legend {
+        justify-content: flex-end;
+      }
+    }
+
+    @media (width <= 720px) {
+      &__matrix-card :deep(.art-section-card__header) {
+        flex-direction: column;
+      }
+
+      &__legend {
+        justify-content: flex-start;
+      }
     }
   }
 </style>

@@ -1,10 +1,10 @@
 <template>
   <div class="pmis-task-workspace art-page-view business-workspace-page art-full-height">
     <BusinessWorkspaceHeader
-      :eyebrow="kind === 'inspection' ? 'INSPECTION RECORDS' : 'PATROL EXECUTION'"
+      :eyebrow="`${config.eyebrow} · TASK CONTROL`"
       :title="title"
       :description="description"
-      :icon="kind === 'inspection' ? 'ri:file-chart-line' : 'ri:task-line'"
+      :icon="config.icon"
       :tags="[
         { label: '设备主档联动', type: 'primary' },
         { label: '状态可追溯', type: 'success' },
@@ -19,9 +19,9 @@
 
     <section class="pmis-task-workspace__body">
       <ArtWorkspaceSplitter
-        primary-size="256px"
-        primary-min="224px"
-        primary-max="360px"
+        primary-size="288px"
+        primary-min="248px"
+        primary-max="400px"
         :breakpoint="900"
         stacked-primary-size="300px"
       >
@@ -53,7 +53,7 @@
     </section>
 
     <ArtDrawer ref="drawerRef" :title="`${kindLabel}任务详情`" size="lg">
-      <template v-if="detailRow">
+      <PmisDetailDrawerSections v-if="detailRow">
         <ArtSectionCard title="任务摘要" subtitle="计划、设备与执行状态">
           <ArtDescriptions :columns="2" :data="detailRow" :items="taskDescriptions" />
         </ArtSectionCard>
@@ -78,7 +78,7 @@
                 />
               </span>
               <div
-                ><strong>{{ result.item?.itemName || '检查项目' }}</strong
+                ><strong>{{ result.item?.itemName || itemNoun }}</strong
                 ><small>{{ result.item?.requirement || '—' }}</small></div
               >
               <ArtDictDisplay
@@ -89,15 +89,19 @@
             </article>
           </div>
         </ArtSectionCard>
-      </template>
+      </PmisDetailDrawerSections>
     </ArtDrawer>
     <PmisTaskExecutionDialog ref="executionRef" @success="handleExecutionSuccess" />
+    <PmisTaskEditorDialog ref="editorRef" @success="handleExecutionSuccess" />
   </div>
 </template>
 
 <script setup lang="tsx">
   import dayjs from 'dayjs'
   import ArtButtonTable from '@/components/core/forms/art-button-table/index.vue'
+  import ArtButtonMore, {
+    type ButtonMoreItem
+  } from '@/components/core/forms/art-button-more/index.vue'
   import ArtDescriptions from '@/components/core/base/art-descriptions/index.vue'
   import ArtDictDisplay from '@/components/core/base/art-dict-display/index.vue'
   import ArtDrawer from '@/components/core/drawers/art-drawer/index.vue'
@@ -117,16 +121,29 @@
   } from '@/components/core/tables/art-table-query/index.vue'
   import type { ColumnOption } from '@/types'
   import { useAuth } from '@/hooks/core/useAuth'
+  import { useArtFeedback } from '@/hooks/core/useArtFeedback'
   import { useUserStore } from '@/store/modules/user'
-  import { fetchPmisTasks, summarizePmisTasks, type PmisPlanKind, type PmisTask } from '@pmis/api'
+  import {
+    confirmPmisTask,
+    deletePmisTasks,
+    fetchPmisTasks,
+    summarizePmisTasks,
+    type PmisPlanKind,
+    type PmisTask
+  } from '@pmis/api'
   import PmisDepartmentNavigator from './department-navigator.vue'
   import PmisTaskExecutionDialog, {
     type PmisTaskExecutionDialogOpenData
   } from './task-execution-dialog.vue'
+  import { pmisKindConfig } from './business-config'
+  import { resolvePmisTaskPermissions } from './business-permissions'
+  import PmisDetailDrawerSections from './detail-drawer-sections.vue'
+  import PmisTaskEditorDialog, { type TaskEditorOpenData } from './task-editor-dialog.vue'
 
   const props = defineProps<{ kind: PmisPlanKind; mode: 'task' | 'report' }>()
   const userStore = useUserStore()
   const { hasAuth } = useAuth()
+  const { confirmAction } = useArtFeedback()
   const { getDictMap } = storeToRefs(userStore)
   const tableRef = ref<ArtTableQueryExpose>()
   const drawerRef = ref<ArtDrawerExpose<PmisTask>>()
@@ -134,6 +151,7 @@
   const executionRef = ref<{
     handleOpen: (data: PmisTaskExecutionDialogOpenData) => Promise<void>
   }>()
+  const editorRef = ref<{ handleOpen: (data: TaskEditorOpenData) => Promise<void> }>()
   const searchModel = ref<Record<string, unknown>>({
     keyword: '',
     dateRange: [],
@@ -143,14 +161,20 @@
   const total = ref(0)
   const departmentIds = ref<string[]>([])
   const departmentLabel = ref('全部产线')
-  const kindLabel = computed(() => (props.kind === 'inspection' ? '点检' : '巡检'))
+  const config = computed(() => pmisKindConfig(props.kind))
+  const managedTask = computed(
+    () => props.mode === 'task' && ['maintenance', 'preventive'].includes(props.kind)
+  )
+  const kindLabel = computed(() => config.value.label)
+  const isInspectionKind = computed(() => ['inspection', 'patrol'].includes(props.kind))
+  const itemNoun = computed(() => (isInspectionKind.value ? '检查项目' : '作业项目'))
   const title = computed(() =>
     props.mode === 'task' ? `${kindLabel.value}任务` : `${kindLabel.value}记录报表`
   )
   const description = computed(() =>
     props.mode === 'task'
-      ? '按产线、计划日期与执行状态跟踪设备巡检任务，延误任务优先暴露。'
-      : '按设备、日期与结果集中追溯点检记录，支持查看项目明细与批量导出。'
+      ? `按产线、计划日期与执行状态跟踪设备${kindLabel.value}任务，延误任务优先暴露。`
+      : `按设备、日期与结果集中追溯${kindLabel.value}记录，支持查看项目明细与批量导出。`
   )
   const overview = computed(() => summarizePmisTasks(pageRows.value))
   const overdueCount = computed(() => overview.value.overdue)
@@ -239,15 +263,50 @@
       contentHeight: 'calc(100vh - 90px)'
     })
   }
-  const viewPermission = computed(() =>
-    props.kind === 'inspection' ? 'PmisInspectionReport:ViewDetail' : 'PmisPatrolTask:View'
-  )
-  const exportPermission = computed(() =>
-    props.kind === 'inspection' ? 'PmisInspectionReport:Export' : 'PmisPatrolTask:Export'
-  )
+  const permissions = computed(() => resolvePmisTaskPermissions(props.kind, props.mode))
+  const viewPermission = computed(() => permissions.value.view)
+  const exportPermission = computed(() => permissions.value.export)
   const openExecution = (row: PmisTask): void => void executionRef.value?.handleOpen({ task: row })
+  const openEditor = (row?: PmisTask, copy = false): void =>
+    void editorRef.value?.handleOpen({ kind: props.kind, row, copy })
+  const removeRows = async (rows: PmisTask[]): Promise<void> => {
+    await confirmAction(
+      `确定删除选中的 ${rows.length} 个临时任务吗？仅未执行的手工任务可删除。`,
+      `删除${kindLabel.value}任务`,
+      { type: 'warning' }
+    )
+    await deletePmisTasks(
+      rows.map((row) => row.id),
+      props.kind
+    )
+    handleExecutionSuccess()
+  }
+  const confirmTask = async (row: PmisTask): Promise<void> => {
+    await confirmAction(`确认 ${row.taskNo} 的保养结果已复核无误吗？`, '确认保养结果', {
+      type: 'success'
+    })
+    await confirmPmisTask(row.id)
+    handleExecutionSuccess()
+  }
+  const rowMoreActions = (row: PmisTask): ButtonMoreItem[] => [
+    {
+      key: 'copy',
+      label: '复制任务',
+      icon: 'ri:file-copy-line',
+      auth: permissions.value.copy
+    },
+    {
+      key: 'delete',
+      label: '删除任务',
+      icon: 'ri:delete-bin-6-line',
+      color: 'var(--el-color-danger)',
+      auth: permissions.value.delete,
+      disabled: row.status !== 'pending' || row.taskSource === 'scheduled'
+    }
+  ]
   const handleExecutionSuccess = (): void => void tableRef.value?.refreshData()
   const columnsFactory = (): ColumnOption<PmisTask>[] => [
+    ...(managedTask.value ? [{ type: 'selection', width: 48 } as ColumnOption<PmisTask>] : []),
     { type: 'globalIndex', label: '序号', width: 70, fixed: 'left' },
     {
       prop: 'taskNo',
@@ -310,9 +369,8 @@
     {
       prop: 'operation',
       label: '操作',
-      width: props.kind === 'patrol' && props.mode === 'task' ? 176 : 86,
+      width: managedTask.value ? 246 : props.mode === 'task' ? 176 : 86,
       fixed: 'right',
-      align: 'center',
       formatter: (row) => (
         <div class="pmis-task-workspace__row-actions">
           <ArtButtonTable
@@ -320,13 +378,39 @@
             type="view"
             onClick={() => void showDetail(row)}
           />
-          {props.kind === 'patrol' && props.mode === 'task' && row.status === 'pending' ? (
+          {props.mode === 'task' && row.status === 'pending' ? (
             <ArtButtonTable
-              permission="PmisPatrolTask:Execute"
+              permission={permissions.value.execute}
               type="more"
               icon="ri:play-circle-line"
-              label="执行巡检"
+              label={`执行${kindLabel.value}`}
               onClick={() => openExecution(row)}
+            />
+          ) : null}
+          {managedTask.value && row.status === 'pending' && row.taskSource !== 'scheduled' ? (
+            <ArtButtonTable
+              permission={permissions.value.edit}
+              type="edit"
+              onClick={() => openEditor(row)}
+            />
+          ) : null}
+          {props.kind === 'maintenance' &&
+          props.mode === 'task' &&
+          row.status === 'pending_confirm' ? (
+            <ArtButtonTable
+              permission={permissions.value.confirm}
+              type="more"
+              icon="ri:shield-check-line"
+              label="确认"
+              onClick={() => void confirmTask(row)}
+            />
+          ) : null}
+          {managedTask.value ? (
+            <ArtButtonMore
+              list={rowMoreActions(row)}
+              onClick={(item) =>
+                item.key === 'copy' ? openEditor(row, true) : void removeRows([row])
+              }
             />
           ) : null}
         </div>
@@ -334,7 +418,28 @@
     }
   ]
   const headerActions = computed<ArtTableQueryHeaderAction[]>(() => [
-    { type: 'export', permission: exportPermission.value, exportFilename: title.value }
+    ...(managedTask.value
+      ? [
+          {
+            type: 'add',
+            label: `新增${kindLabel.value}任务`,
+            permission: permissions.value.add,
+            onClick: () => openEditor()
+          } as ArtTableQueryHeaderAction
+        ]
+      : []),
+    { type: 'export', permission: exportPermission.value, exportFilename: title.value },
+    ...(managedTask.value
+      ? [
+          {
+            type: 'delete',
+            permission: permissions.value.delete,
+            selectionRequired: true,
+            content: '确定删除选中的临时任务吗？',
+            onClick: async ({ selectedRows }) => removeRows(selectedRows as PmisTask[])
+          } as ArtTableQueryHeaderAction
+        ]
+      : [])
   ])
   const excelColumns: ArtTableQueryExcelColumn[] = [
     { key: 'taskNo', title: '任务单号' },
@@ -346,7 +451,12 @@
     detailRow.value
       ? [
           { key: 'taskNo', label: '任务单号', value: detailRow.value.taskNo },
-          { key: 'status', label: '执行状态', value: detailRow.value.displayStatus },
+          {
+            key: 'status',
+            label: '执行状态',
+            value: detailRow.value.displayStatus,
+            dictCode: 'pmisTaskStatus'
+          },
           { key: 'plan', label: '方案名称', value: detailRow.value.plan.planName },
           { key: 'date', label: '计划日期', value: detailRow.value.plannedDate },
           {
@@ -395,31 +505,34 @@
       overflow: hidden;
     }
 
-    &__link {
+    :deep(.pmis-task-workspace__link) {
       padding: 0;
       font: inherit;
       font-weight: 600;
       color: var(--theme-color);
+      text-decoration: underline;
+      text-decoration-color: color-mix(in srgb, var(--theme-color) 45%, transparent);
+      text-underline-offset: 3px;
       cursor: pointer;
       background: transparent;
       border: 0;
     }
 
-    &__link:focus-visible {
+    :deep(.pmis-task-workspace__link:focus-visible) {
       outline: 2px solid color-mix(in srgb, var(--theme-color) 55%, transparent);
       outline-offset: 3px;
     }
 
-    &__link.is-static {
+    :deep(.pmis-task-workspace__link.is-static) {
       color: var(--el-text-color-primary);
       cursor: default;
     }
 
-    &__row-actions {
+    :deep(.pmis-task-workspace__row-actions) {
       display: flex;
       gap: var(--art-space-1);
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
     }
 
     &__result-list {

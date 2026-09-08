@@ -1,12 +1,13 @@
 <template>
-  <ArtTableMultipleSelect
-    :model-value="modelValue"
+  <component
+    :is="selectorComponent"
+    :model-value="multiple ? modelValues : modelValue"
     :selected-data="selectedData"
     :api-fn="fetchOptions"
     :columns="columns"
-    title="选择适用设备"
+    :title="multiple ? '选择适用设备' : '选择设备'"
     subtitle="数据来自生产设备主档，仅显示当前租户已启用设备"
-    placeholder="选择一台或多台生产设备"
+    :placeholder="multiple ? '选择一台或多台生产设备' : '请选择一台生产设备'"
     search-placeholder="搜索设备编号或设备名称"
     row-key="id"
     :label-key="equipmentLabel"
@@ -16,12 +17,14 @@
     show-pagination
     :page-size="10"
     :disabled="!tenantId"
-    @update:model-value="emit('update:modelValue', normalizeIds($event))"
+    @update:model-value="updateValue"
     @update:selected-data="emit('update:selectedData', normalizeRows($event))"
   />
 </template>
 
 <script setup lang="ts">
+  import type { Component } from 'vue'
+  import ArtTableSingleSelect from '@/components/core/forms/art-data-select/table-single.vue'
   import ArtTableMultipleSelect from '@/components/core/forms/art-data-select/table-multiple.vue'
   import type {
     DataSelectColumn,
@@ -31,25 +34,33 @@
   } from '@/components/core/forms/art-data-select/types'
   import { fetchPmisEquipmentOptions, type PmisEquipmentOption } from '@pmis/api'
 
-  defineOptions({ name: 'PmisEquipmentMultipleSelect' })
+  defineOptions({ name: 'PmisEquipmentSelect' })
   const props = withDefaults(
     defineProps<{
-      modelValue?: string[]
+      modelValue?: string
+      modelValues?: string[]
+      multiple?: boolean
       selectedData?: PmisEquipmentOption[]
       tenantId?: string | null
     }>(),
     {
-      modelValue: () => [],
+      modelValue: undefined,
+      modelValues: () => [],
+      multiple: false,
       selectedData: () => [],
       tenantId: null
     }
   )
   const emit = defineEmits<{
-    'update:modelValue': [value: string[]]
+    'update:modelValue': [value: string | undefined]
+    'update:modelValues': [value: string[]]
     'update:selectedData': [rows: PmisEquipmentOption[]]
   }>()
+  const selectorComponent = computed<Component>(() =>
+    props.multiple ? ArtTableMultipleSelect : ArtTableSingleSelect
+  )
   const equipment = (row: DataSelectRecord) => row as PmisEquipmentOption
-  const equipmentLabel = (row: DataSelectRecord) => equipment(row).equipmentName
+  const equipmentLabel = (row: DataSelectRecord) => equipment(row).equipmentName || '未命名设备'
   const equipmentDescription = (row: DataSelectRecord) =>
     [equipment(row).equipmentCode, equipment(row).department?.departmentName]
       .filter(Boolean)
@@ -63,7 +74,12 @@
       minWidth: 180,
       formatter: (row) => equipment(row).department?.departmentName || '待分配'
     },
-    { prop: 'operationStatus', label: '运行状态', width: 110 }
+    {
+      prop: 'operationStatus',
+      label: '运行状态',
+      width: 110,
+      dict: { code: 'mdmEquipmentOperationStatus', display: 'auto' }
+    }
   ]
   const fetchOptions = async (params: DataSelectFetchParams) =>
     fetchPmisEquipmentOptions({
@@ -75,4 +91,11 @@
   const normalizeIds = (value: DataSelectKey | DataSelectKey[] | undefined): string[] =>
     (Array.isArray(value) ? value : value == null ? [] : [value]).map(String)
   const normalizeRows = (rows: DataSelectRecord[]): PmisEquipmentOption[] => rows.map(equipment)
+  const updateValue = (value: DataSelectKey | DataSelectKey[] | undefined): void => {
+    if (props.multiple) emit('update:modelValues', normalizeIds(value))
+    else {
+      const selectedValue = Array.isArray(value) ? value[0] : value
+      emit('update:modelValue', selectedValue == null ? undefined : String(selectedValue))
+    }
+  }
 </script>

@@ -2,9 +2,9 @@
   <ArtDialog ref="dialogRef" size="xl">
     <div class="pmis-plan-dialog">
       <div class="pmis-plan-dialog__context">
-        <span><ArtSvgIcon :icon="kind === 'inspection' ? 'ri:task-line' : 'ri:route-line'" /></span>
+        <span><ArtSvgIcon :icon="config.icon" /></span>
         <div>
-          <small>{{ kind === 'inspection' ? 'INSPECTION STANDARD' : 'PATROL STANDARD' }}</small>
+          <small>{{ config.eyebrow }}</small>
           <strong>{{ form.planName || `新${kindLabel}方案` }}</strong>
           <p>方案保存后自动生成未来 62 天的设备任务，执行记录继续保留用于追溯。</p>
         </div>
@@ -22,16 +22,18 @@
         :show-submit="false"
       >
         <template #equipmentIds>
-          <PmisEquipmentMultipleSelect
-            v-model="form.equipmentIds"
+          <PmisEquipmentSelect
+            v-model:model-values="form.equipmentIds"
             v-model:selected-data="selectedEquipment"
+            multiple
             :tenant-id="form.tenantId"
           />
         </template>
         <template #responsibleEmployeeIds>
-          <PmisEmployeeMultipleSelect
-            v-model="form.responsibleEmployeeIds"
+          <ArtEmployeeSelect
+            v-model:model-values="form.responsibleEmployeeIds"
             v-model:selected-data="selectedEmployees"
+            multiple
             :tenant-id="form.tenantId"
           />
         </template>
@@ -44,7 +46,7 @@
           />
         </template>
         <template #items>
-          <PmisPlanItemEditor ref="itemEditorRef" v-model="form.items" />
+          <PmisPlanItemEditor ref="itemEditorRef" v-model="form.items" :item-noun="itemNoun" />
         </template>
       </ArtForm>
     </div>
@@ -55,6 +57,7 @@
   import type { FormRules } from 'element-plus'
   import { cloneDeep } from 'lodash-es'
   import type { EmployeeIntegrationItem } from '@/api/integration/employees'
+  import ArtEmployeeSelect from '@/components/business/art-employee-select/index.vue'
   import ArtDialog from '@/components/core/dialogs/art-dialog/index.vue'
   import type { ArtDialogExpose } from '@/components/core/dialogs/art-dialog/types'
   import ArtForm, { type FormItem } from '@/components/core/forms/art-form/index.vue'
@@ -69,9 +72,9 @@
     type PmisPlanInput,
     type PmisPlanKind
   } from '@pmis/api'
-  import PmisEmployeeMultipleSelect from './employee-multiple-select.vue'
-  import PmisEquipmentMultipleSelect from './equipment-multiple-select.vue'
+  import PmisEquipmentSelect from './equipment-select.vue'
   import PmisPlanItemEditor from './plan-item-editor.vue'
+  import { pmisKindConfig } from './business-config'
 
   export interface PmisPlanDialogOpenData {
     kind: PmisPlanKind
@@ -103,7 +106,11 @@
   const tenantOptions = ref<Array<{ label: string; value: string }>>([])
   const selectedEquipment = shallowRef<PmisEquipmentOption[]>([])
   const selectedEmployees = shallowRef<EmployeeIntegrationItem[]>([])
-  const kindLabel = computed(() => (kind.value === 'inspection' ? '点检' : '巡检'))
+  const config = computed(() => pmisKindConfig(kind.value))
+  const kindLabel = computed(() => config.value.label)
+  const itemNoun = computed(() =>
+    ['maintenance', 'preventive'].includes(kind.value) ? '作业项目' : '检查项目'
+  )
   const initialForm = (planKind: PmisPlanKind = 'inspection'): PlanForm => ({
     id: undefined,
     tenantId: '',
@@ -229,7 +236,7 @@
     { label: '适用设备', key: 'equipmentIds', type: 'slot', span: 12 },
     { label: '负责人', key: 'responsibleEmployeeIds', type: 'slot', span: 12 },
     { label: 'SOP / 作业指导书', key: 'sopUrl', type: 'slot', span: 24 },
-    { label: '检查项目', key: 'itemSection', type: 'divider', span: 24 },
+    { label: itemNoun.value, key: 'itemSection', type: 'divider', span: 24 },
     { label: '', key: 'items', type: 'slot', span: 24, hideLabel: true }
   ])
   const rules: FormRules = {

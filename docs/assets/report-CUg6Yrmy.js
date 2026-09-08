@@ -1,0 +1,1 @@
+import{Kn as e,Xt as t,sn as n}from"./style-BULLq20t.js";import{t as r}from"./task-workspace-CztePgL3.js";var i=n({name:`PmisInspectionReport`,__name:`index`,setup(n){return(n,i)=>(e(),t(r,{kind:`inspection`,mode:`report`}))}});export{i as default};

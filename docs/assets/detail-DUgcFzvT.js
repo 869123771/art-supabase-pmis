@@ -1,0 +1,1 @@
+import{Kn as e,Xt as t,sn as n}from"./style-BULLq20t.js";import{t as r}from"./calendar-workspace-D5qfgJos.js";var i=n({name:`PmisInspectionDetail`,__name:`index`,setup(n){return(n,i)=>(e(),t(r,{mode:`detail`}))}});export{i as default};

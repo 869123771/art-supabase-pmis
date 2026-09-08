@@ -3,73 +3,75 @@
     <BusinessWorkspaceHeader
       eyebrow="PHYSICAL ASSET OPERATIONS"
       title="PMIS设备管理"
-      description="围绕设备点检与巡检建立标准、计划、执行、异常和分析闭环，保持现场任务与设备健康状态可追踪。"
+      description="统一承载设备点检、巡检、保养、故障维修与预防维修，贯通标准、计划、执行、异常和分析闭环。"
       icon="ri:tools-line"
       :tags="[
-        { label: '设备运维', type: 'primary' },
-        { label: '任务闭环', type: 'success' },
-        { label: '独立应用', type: 'info' }
+        { label: '五类业务协同', type: 'primary' },
+        { label: '任务全程可追溯', type: 'success' },
+        { label: '租户安全隔离', type: 'info' }
       ]"
       :metrics="metrics"
     />
 
-    <div class="pmis-workbench__grid">
-      <ArtSectionCard
-        title="设备运维闭环"
-        subtitle="点检与巡检已按统一任务链路贯通方案、任务、结果和分析。"
-        preserve-content-structure
-      >
-        <div class="operation-flow" aria-label="设备运维业务闭环">
-          <article v-for="(step, index) in flow" :key="step.title">
-            <span class="operation-flow__index">{{ String(index + 1).padStart(2, '0') }}</span>
-            <span class="operation-flow__icon"><ArtSvgIcon :icon="step.icon" /></span>
-            <strong>{{ step.title }}</strong>
-            <small>{{ step.description }}</small>
-          </article>
-        </div>
-      </ArtSectionCard>
+    <ElScrollbar class="pmis-workbench__scroll">
+      <div class="pmis-workbench__grid">
+        <ArtSectionCard
+          title="设备运维闭环"
+          subtitle="点检、巡检、保养、故障维修与预防维修共享统一的设备任务闭环。"
+          preserve-content-structure
+        >
+          <div class="operation-flow" aria-label="设备运维业务闭环">
+            <article v-for="(step, index) in flow" :key="step.title">
+              <span class="operation-flow__index">{{ String(index + 1).padStart(2, '0') }}</span>
+              <span class="operation-flow__icon"><ArtSvgIcon :icon="step.icon" /></span>
+              <strong>{{ step.title }}</strong>
+              <small>{{ step.description }}</small>
+            </article>
+          </div>
+        </ArtSectionCard>
 
-      <ArtSectionCard
-        title="应用边界"
-        subtitle="拆仓后仍复用平台登录、租户、权限与动态菜单。"
-        preserve-content-structure
-      >
-        <ul class="boundary-list">
-          <li v-for="item in boundaries" :key="item.title">
-            <span><ArtSvgIcon :icon="item.icon" /></span>
-            <div
-              ><strong>{{ item.title }}</strong
-              ><small>{{ item.description }}</small></div
-            >
-            <ElTag size="small" effect="plain" type="success" round>已接入</ElTag>
-          </li>
-        </ul>
-      </ArtSectionCard>
-
-      <ArtSectionCard
-        class="pmis-workbench__capabilities"
-        title="既有菜单能力"
-        subtitle="名称与层级保持不变，九个业务入口均已接入真实设备主档与租户数据。"
-        preserve-content-structure
-      >
-        <div class="capability-grid">
-          <article v-for="group in capabilityGroups" :key="group.title">
-            <div class="capability-grid__heading">
-              <span><ArtSvgIcon :icon="group.icon" /></span>
+        <ArtSectionCard
+          title="应用边界"
+          subtitle="拆仓后仍复用平台登录、租户、权限与动态菜单。"
+          preserve-content-structure
+        >
+          <ul class="boundary-list">
+            <li v-for="item in boundaries" :key="item.title">
+              <span><ArtSvgIcon :icon="item.icon" /></span>
               <div
-                ><small>{{ group.eyebrow }}</small
-                ><strong>{{ group.title }}</strong></div
+                ><strong>{{ item.title }}</strong
+                ><small>{{ item.description }}</small></div
               >
-            </div>
-            <div class="capability-grid__tags">
-              <ElTag v-for="item in group.items" :key="item" size="small" effect="plain">{{
-                item
-              }}</ElTag>
-            </div>
-          </article>
-        </div>
-      </ArtSectionCard>
-    </div>
+              <ElTag size="small" effect="plain" type="success" round>已接入</ElTag>
+            </li>
+          </ul>
+        </ArtSectionCard>
+
+        <ArtSectionCard
+          class="pmis-workbench__capabilities"
+          title="业务能力全景"
+          subtitle="按业务域汇总当前可用能力，入口复用真实设备、组织与人员主数据。"
+          preserve-content-structure
+        >
+          <div class="capability-grid">
+            <article v-for="group in capabilityGroups" :key="group.title">
+              <div class="capability-grid__heading">
+                <span><ArtSvgIcon :icon="group.icon" /></span>
+                <div
+                  ><small>{{ group.eyebrow }}</small
+                  ><strong>{{ group.title }}</strong></div
+                >
+              </div>
+              <div class="capability-grid__tags">
+                <ElTag v-for="item in group.items" :key="item" size="small" effect="plain">{{
+                  item
+                }}</ElTag>
+              </div>
+            </article>
+          </div>
+        </ArtSectionCard>
+      </div>
+    </ElScrollbar>
   </div>
 </template>
 
@@ -84,24 +86,24 @@
 
   const metrics: BusinessWorkspaceMetric[] = [
     {
-      label: '独立应用',
-      value: '已接入',
-      description: 'PMIS 子仓运行时',
-      icon: 'ri:git-repository-line',
-      tone: 'success'
-    },
-    {
-      label: '点检菜单',
-      value: 6,
-      description: '点检业务入口',
-      icon: 'ri:task-line',
+      label: '业务域',
+      value: 5,
+      description: '覆盖设备运维全场景',
+      icon: 'ri:apps-2-line',
       tone: 'primary'
     },
     {
-      label: '巡检菜单',
-      value: 3,
-      description: '巡检业务入口',
-      icon: 'ri:route-line',
+      label: '任务闭环',
+      value: '统一',
+      description: '方案、执行、结果、分析',
+      icon: 'ri:loop-right-line',
+      tone: 'success'
+    },
+    {
+      label: '组织范围',
+      value: '树形',
+      description: '部门与产线逐级下钻',
+      icon: 'ri:node-tree',
       tone: 'primary'
     },
     {
@@ -136,17 +138,41 @@
       title: '设备巡检',
       icon: 'ri:route-line',
       items: ['巡检任务', '巡检分析', '巡检方案']
+    },
+    {
+      eyebrow: 'MAINTENANCE',
+      title: '设备保养',
+      icon: 'ri:settings-5-line',
+      items: ['保养设置', '保养方案', '保养任务', '保养分析', '保养明细表', '保养记录报表']
+    },
+    {
+      eyebrow: 'REPAIR',
+      title: '故障维修',
+      icon: 'ri:hammer-line',
+      items: ['设置维修人员', '维修任务', '维修分析']
+    },
+    {
+      eyebrow: 'PREVENTIVE',
+      title: '预防维修',
+      icon: 'ri:shield-check-line',
+      items: ['预防维修方案', '预防维修任务', '预防维修分析', '预防维修明细表']
     }
   ]
 </script>
 
 <style scoped lang="scss">
+  .pmis-workbench__scroll {
+    flex: 1;
+    min-height: 0;
+  }
+
   .pmis-workbench__grid {
     display: grid;
     grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.75fr);
     gap: 16px;
     align-content: start;
     min-height: 0;
+    padding-bottom: 4px;
   }
 
   .pmis-workbench__grid > :deep(.art-section-card) {
@@ -266,19 +292,24 @@
 
   .capability-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    overflow: hidden;
-    border: 1px solid var(--el-border-color-lighter);
-    border-radius: var(--el-border-radius-base);
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
   }
 
   .capability-grid article {
     min-width: 0;
-    padding: 18px;
+    padding: 16px;
+    background: color-mix(in srgb, var(--art-gray-100) 62%, var(--default-box-color));
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: var(--el-border-radius-base);
+    transition:
+      border-color var(--art-motion-duration-fast) ease,
+      transform var(--art-motion-duration-fast) ease;
   }
 
-  .capability-grid article + article {
-    border-left: 1px solid var(--el-border-color-lighter);
+  .capability-grid article:hover {
+    border-color: color-mix(in srgb, var(--theme-color) 32%, var(--el-border-color-lighter));
+    transform: translateY(-1px);
   }
 
   .capability-grid__heading {
@@ -343,11 +374,6 @@
 
     .capability-grid {
       grid-template-columns: 1fr;
-    }
-
-    .capability-grid article + article {
-      border-top: 1px solid var(--el-border-color-lighter);
-      border-left: 0;
     }
   }
 </style>

@@ -35,20 +35,18 @@
     >
       <template #actions>
         <div class="pmis-dashboard__filters">
-          <ElSelect
+          <ElTreeSelect
             v-model="filters.departmentId"
+            :data="departments"
+            node-key="id"
+            :props="{ label: 'departmentName', children: 'children' }"
             clearable
             filterable
+            check-strictly
+            default-expand-all
             placeholder="全部产线"
             aria-label="筛选部门或产线"
-          >
-            <ElOption
-              v-for="item in departments"
-              :key="item.id"
-              :label="item.departmentName"
-              :value="item.id"
-            />
-          </ElSelect>
+          />
           <ElSelect
             v-model="filters.equipmentId"
             clearable
@@ -110,11 +108,11 @@
     </ArtSectionCard>
 
     <ArtDrawer ref="drawerRef" title="设备点检详情" size="lg">
-      <template v-if="detailTask">
+      <PmisDetailDrawerSections v-if="detailTask">
         <ArtSectionCard title="点检任务" subtitle="当日设备任务与执行结果">
           <ArtDescriptions :columns="2" :data="detailTask" :items="taskDescriptions" />
         </ArtSectionCard>
-      </template>
+      </PmisDetailDrawerSections>
     </ArtDrawer>
 
     <ArtDialog ref="settingsRef" size="sm" content-max-height="440px">
@@ -142,6 +140,7 @@
 <script setup lang="ts">
   import dayjs from 'dayjs'
   import { useIntervalFn } from '@vueuse/core'
+  import TreeUtils from '@/utils/tree'
   import ArtDescriptions from '@/components/core/base/art-descriptions/index.vue'
   import ArtDialog from '@/components/core/dialogs/art-dialog/index.vue'
   import type { ArtDialogExpose } from '@/components/core/dialogs/art-dialog/types'
@@ -151,16 +150,17 @@
   import ArtForm, { type FormItem } from '@/components/core/forms/art-form/index.vue'
   import ArtSectionCard from '@/components/core/surfaces/art-section-card/index.vue'
   import ArtSvgIcon from '@/components/core/base/art-svg-icon/index.vue'
+  import PmisDetailDrawerSections from './detail-drawer-sections.vue'
   import BusinessWorkspaceHeader, {
     type BusinessWorkspaceMetric
   } from '@/components/business/business-workspace-header/index.vue'
   import { useUserStore } from '@/store/modules/user'
   import {
-    fetchPmisDepartments,
+    fetchPmisDepartmentTree,
     fetchPmisEquipmentOptions,
     fetchPmisTaskSnapshot,
     summarizePmisTasks,
-    type PmisDepartmentOption,
+    type PmisDepartmentTreeOption,
     type PmisEquipmentOption,
     type PmisTask,
     type PmisTaskStatus
@@ -171,7 +171,7 @@
   const drawerRef = ref<ArtDrawerExpose<PmisTask>>()
   const settingsRef = ref<ArtDialogExpose>()
   const detailTask = shallowRef<PmisTask>()
-  const departments = shallowRef<PmisDepartmentOption[]>([])
+  const departments = shallowRef<PmisDepartmentTreeOption[]>([])
   const equipment = shallowRef<PmisEquipmentOption[]>([])
   const state = reactive<{ loading: boolean; error: string; tasks: PmisTask[] }>({
     loading: false,
@@ -186,9 +186,23 @@
   const settings = reactive({ refreshMinutes: 5, columns: 4 })
   const refreshMinutes = computed(() => settings.refreshMinutes)
   const statusOptions = computed(() => getDictMap.value.pmisTaskStatus ?? [])
+  const departmentTreeUtils = new TreeUtils({
+    idKey: 'id',
+    parentKey: 'parentId',
+    childrenKey: 'children'
+  })
+  const selectedDepartmentIds = computed(() =>
+    filters.departmentId
+      ? departmentTreeUtils
+          .getDescendants(departments.value, filters.departmentId, true)
+          .map((item) => String(item.id))
+      : []
+  )
   const statusRank: Record<PmisTaskStatus, number> = {
     overdue: 4,
+    completed_overdue: 3,
     pending: 3,
+    pending_confirm: 3,
     completed: 2,
     exempt: 1
   }
@@ -196,7 +210,8 @@
     state.tasks
       .filter(
         (task) =>
-          !filters.departmentId || task.equipment.productionDepartmentId === filters.departmentId
+          !filters.departmentId ||
+          selectedDepartmentIds.value.includes(task.equipment.productionDepartmentId || '')
       )
       .filter((task) => !filters.equipmentId || task.equipment.id === filters.equipmentId)
       .filter((task) => !filters.status || task.displayStatus === filters.status)
@@ -235,7 +250,7 @@
   const filterCaption = computed(
     () =>
       [
-        departments.value.find((item) => item.id === filters.departmentId)?.departmentName,
+        departmentTreeUtils.findNode(departments.value, filters.departmentId)?.departmentName,
         equipment.value.find((item) => item.id === filters.equipmentId)?.equipmentName,
         statusOptions.value.find((item) => item.value === filters.status)?.label
       ]
@@ -295,7 +310,12 @@
             label: '设备',
             value: `${detailTask.value.equipment.equipmentName} · ${detailTask.value.equipment.equipmentCode}`
           },
-          { key: 'status', label: '点检状态', value: detailTask.value.displayStatus },
+          {
+            key: 'status',
+            label: '点检状态',
+            value: detailTask.value.displayStatus,
+            dictCode: 'pmisTaskStatus'
+          },
           {
             key: 'department',
             label: '部门 / 产线',
@@ -321,11 +341,11 @@
   })
   void Promise.all([
     userStore.ensureDictLoaded('pmisTaskStatus'),
-    fetchPmisDepartments(),
+    fetchPmisDepartmentTree(),
     fetchPmisEquipmentOptions({ current: 1, size: 500 })
   ])
-    .then(([, departmentRows, equipmentResult]) => {
-      departments.value = departmentRows
+    .then(([, departmentTree, equipmentResult]) => {
+      departments.value = departmentTree
       equipment.value = equipmentResult.data
     })
     .finally(() => void load())

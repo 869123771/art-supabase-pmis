@@ -1,0 +1,1 @@
+import{Kn as e,Xt as t,sn as n}from"./style-BULLq20t.js";import{t as r}from"./analysis-workspace-_oSru-zn.js";var i=n({name:`PmisInspectionAnalysis`,__name:`index`,setup(n){return(n,i)=>(e(),t(r,{kind:`inspection`}))}});export{i as default};
