@@ -1,10 +1,10 @@
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import vue from '@vitejs/plugin-vue'
 import vueJsx from '@vitejs/plugin-vue-jsx'
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig, loadEnv, type Plugin, type UserConfig } from 'vite'
 import AutoImport from 'unplugin-auto-import/vite'
 import ElementPlus from 'unplugin-element-plus/vite'
 import Components from 'unplugin-vue-components/vite'
@@ -40,18 +40,79 @@ function resolvePlatformRoot(): string {
 
 const platformRoot = resolvePlatformRoot()
 const platformSourceRoot = path.join(platformRoot, 'src')
-const sourcePattern = /[\\/](?:art-supabase-pmis|art-supabase-pro)[\\/].*\.(?:ts|tsx|vue)(?:\?.*)?$/
+const sourceTransformPattern = createSourceTransformPattern(applicationRoot, platformSourceRoot)
 
-export default defineConfig(({ mode }) => {
-  const env = { ...loadEnv(mode, platformRoot, ''), ...loadEnv(mode, applicationRoot, '') }
+interface SharedBuildLogPolicy {
+  chunkSizeWarningLimit: number
+  rolldownOptions: NonNullable<NonNullable<UserConfig['build']>['rolldownOptions']>
+  summaryPlugin: Plugin
+}
+
+interface BuildLogPolicyModule {
+  createBuildLogPolicy(): SharedBuildLogPolicy
+}
+
+async function loadBuildLogPolicy(): Promise<BuildLogPolicyModule | null> {
+  const policyPath = path.join(platformRoot, 'scripts/build-log-policy.mjs')
+  if (!existsSync(policyPath)) {
+    console.warn('[vite] 当前平台版本未提供共享构建日志策略，未知警告将保持原样。')
+    return null
+  }
+  return import(pathToFileURL(policyPath).href) as Promise<BuildLogPolicyModule>
+}
+
+function createSourceTransformPattern(...roots: string[]): RegExp {
+  const rootPattern = roots
+    .map((root) =>
+      root
+        .replace(/\\/g, '/')
+        .replace(/\/+$/, '')
+        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    )
+    .join('|')
+  return new RegExp(`^(?:${rootPattern})/.*\\.(?:ts|tsx|vue)(?:\\?.*)?$`)
+}
+
+interface PmisRuntimeEnv extends Record<string, string | undefined> {
+  VITE_APP_CODE: string
+  VITE_BASE_URL?: string
+  VITE_OUT_DIR?: string
+  VITE_PORT?: string
+  VITE_VERSION?: string
+}
+
+function createNoJekyllPlugin(): Plugin {
+  return {
+    name: 'pmis-no-jekyll',
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: '.nojekyll', source: '' })
+    }
+  }
+}
+
+export default defineConfig(async ({ mode }) => {
+  const platformEnv = loadEnv(mode, platformRoot, '')
+  const applicationEnv = loadEnv(mode, applicationRoot, '')
+  const env: PmisRuntimeEnv = {
+    ...platformEnv,
+    ...applicationEnv,
+    VITE_APP_CODE: 'pmis'
+  }
+  const exposedEnv = Object.fromEntries(
+    Object.entries(env)
+      .filter((entry): entry is [string, string] =>
+        Boolean(entry[0].startsWith('VITE_') && entry[1] !== undefined)
+      )
+      .map(([key, value]) => [`import.meta.env.${key}`, JSON.stringify(value)])
+  )
   const outDir = process.env.VITE_OUT_DIR || env.VITE_OUT_DIR || 'docs'
+  const buildLogPolicy = (await loadBuildLogPolicy())?.createBuildLogPolicy()
 
   return {
     base: env.VITE_BASE_URL || '/',
-    envDir: platformRoot,
     define: {
       __APP_VERSION__: JSON.stringify(env.VITE_VERSION || '1.0.0'),
-      'import.meta.env.VITE_APP_CODE': JSON.stringify('pmis')
+      ...exposedEnv
     },
     server: {
       host: true,
@@ -78,25 +139,30 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       AutoImport({
         imports: ['vue', 'vue-router', 'pinia', '@vueuse/core'],
-        include: [sourcePattern],
+        include: [sourceTransformPattern],
+        exclude: [/[\\/]\.git[\\/]/],
         dts: false,
         resolvers: [ElementPlusResolver({ importStyle: 'sass' })]
       }),
       Components({
-        include: [sourcePattern],
+        include: [sourceTransformPattern],
+        exclude: [/[\\/]\.git[\\/]/, /[\\/]art-data-select[\\/]preview\.vue$/],
         dirs: [path.join(platformSourceRoot, 'components')],
         deep: true,
         dts: false,
         resolvers: [ElementPlusResolver({ importStyle: 'sass' })]
       }),
-      ElementPlus({ useSource: true })
+      ElementPlus({ useSource: true }),
+      createNoJekyllPlugin(),
+      ...(buildLogPolicy ? [buildLogPolicy.summaryPlugin] : [])
     ],
     build: {
       target: 'es2020',
       outDir,
       emptyOutDir: true,
       reportCompressedSize: false,
-      chunkSizeWarningLimit: 2000
+      chunkSizeWarningLimit: buildLogPolicy?.chunkSizeWarningLimit ?? 2000,
+      ...(buildLogPolicy ? { rolldownOptions: buildLogPolicy.rolldownOptions } : {})
     },
     css: {
       preprocessorOptions: {

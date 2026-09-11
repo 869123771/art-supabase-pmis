@@ -143,7 +143,7 @@
 
 <script setup lang="tsx">
   import dayjs from 'dayjs'
-  import { ElTooltip } from 'element-plus'
+  import ArtTooltip from '@/components/core/feedback/art-tooltip/index.vue'
   import ArtDescriptions from '@/components/core/base/art-descriptions/index.vue'
   import ArtDictDisplay from '@/components/core/base/art-dict-display/index.vue'
   import ArtDrawer from '@/components/core/drawers/art-drawer/index.vue'
@@ -390,7 +390,12 @@
     }`
   const cell = (task?: PmisTask) =>
     task && hasAuth(viewPermission.value) ? (
-      <ElTooltip content={statusTooltip(task, true)} placement="top" showAfter={180} hideAfter={80}>
+      <ArtTooltip
+        content={statusTooltip(task, true)}
+        placement="top"
+        showAfter={180}
+        hideAfter={80}
+      >
         <button
           type="button"
           class={['pmis-calendar__status', `is-${task.displayStatus}`]}
@@ -399,9 +404,9 @@
         >
           {statusMark(task.displayStatus)}
         </button>
-      </ElTooltip>
+      </ArtTooltip>
     ) : task ? (
-      <ElTooltip
+      <ArtTooltip
         content={statusTooltip(task, false)}
         placement="top"
         showAfter={180}
@@ -413,7 +418,7 @@
         >
           {statusMark(task.displayStatus)}
         </span>
-      </ElTooltip>
+      </ArtTooltip>
     ) : (
       <span class="pmis-calendar__empty-cell">—</span>
     )
