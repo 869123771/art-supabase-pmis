@@ -1,1 +1,0 @@
-import{Kn as e,Xt as t,sn as n}from"./style-DeluiDJD.js";import{t as r}from"./calendar-workspace-DLBBYi1f.js";var i=n({name:`PmisInspectionDetail`,__name:`index`,setup(n){return(n,i)=>(e(),t(r,{mode:`detail`}))}});export{i as default};

@@ -54,6 +54,7 @@
 </template>
 
 <script setup lang="ts">
+  import { normalizeNullableText } from '@/utils/form/normalize'
   import type { FormRules } from 'element-plus'
   import { cloneDeep } from 'lodash-es'
   import type { EmployeeIntegrationItem } from '@/api/integration/employees'
@@ -294,7 +295,7 @@
             ...item,
             itemName: item.itemName.trim(),
             requirement: item.requirement.trim(),
-            judgmentRule: item.judgmentRule?.trim() || null,
+            judgmentRule: normalizeNullableText(item.judgmentRule),
             sort: (index + 1) * 10
           }))
         },

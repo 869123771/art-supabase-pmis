@@ -1,1 +1,0 @@
-import{Kn as e,Xt as t,sn as n}from"./style-DeluiDJD.js";import{t as r}from"./plan-workspace-Bi9x4E8K.js";var i=n({name:`PmisPatrolPlan`,__name:`index`,setup(n){return(n,i)=>(e(),t(r,{kind:`patrol`}))}});export{i as default};

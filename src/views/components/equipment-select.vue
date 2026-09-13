@@ -23,6 +23,8 @@
 </template>
 
 <script setup lang="ts">
+  import { normalizeStringList } from '@/utils/form/normalize'
+
   import type { Component } from 'vue'
   import ArtTableSingleSelect from '@/components/core/forms/art-data-select/table-single.vue'
   import ArtTableMultipleSelect from '@/components/core/forms/art-data-select/table-multiple.vue'
@@ -88,11 +90,10 @@
       keyword: params.keyword,
       tenantId: props.tenantId || undefined
     })
-  const normalizeIds = (value: DataSelectKey | DataSelectKey[] | undefined): string[] =>
-    (Array.isArray(value) ? value : value == null ? [] : [value]).map(String)
+
   const normalizeRows = (rows: DataSelectRecord[]): PmisEquipmentOption[] => rows.map(equipment)
   const updateValue = (value: DataSelectKey | DataSelectKey[] | undefined): void => {
-    if (props.multiple) emit('update:modelValues', normalizeIds(value))
+    if (props.multiple) emit('update:modelValues', normalizeStringList(value))
     else {
       const selectedValue = Array.isArray(value) ? value[0] : value
       emit('update:modelValue', selectedValue == null ? undefined : String(selectedValue))

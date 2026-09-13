@@ -123,6 +123,7 @@
 </template>
 
 <script setup lang="ts">
+  import { normalizeNullableText } from '@/utils/form/normalize'
   import { ElMessage, type FormRules } from 'element-plus'
   import type { EmployeeIntegrationItem } from '@/api/integration/employees'
   import ArtEmployeeSelect from '@/components/business/art-employee-select/index.vue'
@@ -298,15 +299,15 @@
       await completePmisTask({
         taskId: task.value.id,
         executorEmployeeId: form.model.executorEmployeeId,
-        executionSummary: form.model.executionSummary.trim() || null,
+        executionSummary: normalizeNullableText(form.model.executionSummary),
         beforePhotoFiles: [...form.model.beforePhotoFiles],
         afterPhotoFiles: [...form.model.afterPhotoFiles],
         results: form.model.results.map((result) => ({
           planItemId: result.planItemId,
           resultStatus: result.resultStatus,
-          resultValue: result.resultValue.trim() || null,
+          resultValue: normalizeNullableText(result.resultValue),
           photoFiles: [...result.photoFiles],
-          remark: result.remark.trim() || null
+          remark: normalizeNullableText(result.remark)
         }))
       })
       emit('success')
