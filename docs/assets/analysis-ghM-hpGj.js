@@ -1,0 +1,1 @@
+import{Kn as e,Xt as t,sn as n}from"./style-DeluiDJD.js";import{t as r}from"./analysis-workspace-Dxl6_egi.js";var i=n({name:`PmisInspectionAnalysis`,__name:`index`,setup(n){return(n,i)=>(e(),t(r,{kind:`inspection`}))}});export{i as default};

@@ -1,0 +1,1 @@
+import{Kn as e,Xt as t,sn as n}from"./style-DeluiDJD.js";import{t as r}from"./task-workspace-DBs2e95R.js";var i=n({__name:`index`,setup(n){return(n,i)=>(e(),t(r,{kind:`preventive`,mode:`task`}))}});export{i as default};
