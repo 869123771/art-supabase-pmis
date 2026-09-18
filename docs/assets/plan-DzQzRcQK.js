@@ -1,0 +1,1 @@
+import{Kn as e,Xt as t,sn as n}from"./style-DeluiDJD.js";import{t as r}from"./plan-workspace-C3tFIdtw.js";var i=n({name:`PmisInspectionPlan`,__name:`index`,setup(n){return(n,i)=>(e(),t(r,{kind:`inspection`}))}});export{i as default};

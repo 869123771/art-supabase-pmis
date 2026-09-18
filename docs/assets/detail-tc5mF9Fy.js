@@ -1,0 +1,1 @@
+import{Kn as e,Xt as t,sn as n}from"./style-DeluiDJD.js";import{t as r}from"./calendar-workspace-DKTZbvII.js";var i=n({__name:`index`,setup(n){return(n,i)=>(e(),t(r,{kind:`patrol`,mode:`detail`}))}});export{i as default};

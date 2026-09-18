@@ -822,10 +822,6 @@
     }
 
     @media (width <= 720px) {
-      &__matrix-card :deep(.art-section-card__header) {
-        flex-direction: column;
-      }
-
       &__legend {
         justify-content: flex-start;
       }
