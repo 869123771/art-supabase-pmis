@@ -68,6 +68,7 @@
 
 <script setup lang="tsx">
   import dayjs from 'dayjs'
+  import BusinessTableRowActions from '@/components/business/business-table-row-actions/index.vue'
   import ArtButtonMore, {
     type ButtonMoreItem
   } from '@/components/core/forms/art-button-more/index.vue'
@@ -391,7 +392,7 @@
       width: 176,
       fixed: 'right',
       formatter: (row) => (
-        <div class="pmis-plan-workspace__row-actions">
+        <BusinessTableRowActions>
           <ArtButtonTable
             permission={permissions.value.view}
             type="view"
@@ -408,7 +409,7 @@
               item.key === 'copy' ? openDialog(row, true) : void removeRows([row])
             }
           />
-        </div>
+        </BusinessTableRowActions>
       )
     }
   ]
@@ -518,13 +519,6 @@
         color: var(--el-text-color-primary);
         cursor: default;
       }
-    }
-
-    :deep(.pmis-plan-workspace__row-actions) {
-      display: flex;
-      gap: var(--art-space-1);
-      align-items: center;
-      justify-content: flex-start;
     }
 
     &__item-list {

@@ -27,6 +27,7 @@
   } from '@/components/core/tables/art-table/index.vue'
   import ArtButtonTable from '@/components/core/forms/art-button-table/index.vue'
   import ArtSvgIcon from '@/components/core/base/art-svg-icon/index.vue'
+  import BusinessTableRowActions from '@/components/business/business-table-row-actions/index.vue'
   import type { ColumnOption } from '@/types'
   import type { PmisPlanItem } from '@pmis/api'
 
@@ -122,7 +123,7 @@
       width: 152,
       fixed: 'right',
       formatter: (row: PmisPlanItem) => (
-        <div class="plan-item-editor__actions">
+        <BusinessTableRowActions>
           <ArtButtonTable
             type="more"
             icon="ri:arrow-up-line"
@@ -143,7 +144,7 @@
             disabled={props.modelValue.length === 1}
             onClick={() => removeItem(props.modelValue.indexOf(row))}
           />
-        </div>
+        </BusinessTableRowActions>
       )
     }
   ]
@@ -172,12 +173,6 @@
         font-size: 12px;
         color: var(--el-text-color-secondary);
       }
-    }
-
-    &__actions {
-      display: flex;
-      gap: 4px;
-      justify-content: center;
     }
   }
 

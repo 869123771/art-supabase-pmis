@@ -98,6 +98,7 @@
 
 <script setup lang="tsx">
   import dayjs from 'dayjs'
+  import BusinessTableRowActions from '@/components/business/business-table-row-actions/index.vue'
   import ArtButtonTable from '@/components/core/forms/art-button-table/index.vue'
   import ArtButtonMore, {
     type ButtonMoreItem
@@ -372,7 +373,7 @@
       width: managedTask.value ? 246 : props.mode === 'task' ? 176 : 86,
       fixed: 'right',
       formatter: (row) => (
-        <div class="pmis-task-workspace__row-actions">
+        <BusinessTableRowActions>
           <ArtButtonTable
             permission={viewPermission.value}
             type="view"
@@ -413,7 +414,7 @@
               }
             />
           ) : null}
-        </div>
+        </BusinessTableRowActions>
       )
     }
   ]
@@ -526,13 +527,6 @@
     :deep(.pmis-task-workspace__link.is-static) {
       color: var(--el-text-color-primary);
       cursor: default;
-    }
-
-    :deep(.pmis-task-workspace__row-actions) {
-      display: flex;
-      gap: var(--art-space-1);
-      align-items: center;
-      justify-content: flex-start;
     }
 
     &__result-list {

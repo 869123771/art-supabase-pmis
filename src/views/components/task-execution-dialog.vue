@@ -1,20 +1,19 @@
 <template>
   <ArtDialog ref="dialogRef" size="xl">
     <div v-if="task" class="pmis-task-execution">
-      <div class="pmis-task-execution__context">
-        <span aria-hidden="true"><ArtSvgIcon :icon="taskIcon" /></span>
-        <div>
-          <small>{{ kindLabel }}任务</small>
-          <strong>{{ task.taskNo }}</strong>
-          <p>
-            {{ task.equipment.equipmentName }} · {{ task.plan.planName }} · 计划日期
-            {{ task.plannedDate }}
-          </p>
-        </div>
-        <span class="pmis-task-execution__progress">
-          {{ completedCount }} / {{ form.model.results.length }}
-        </span>
-      </div>
+      <ArtEntitySummary
+        :icon="taskIcon"
+        :eyebrow="`${kindLabel}任务`"
+        :title="task.taskNo"
+        :description="`${task.equipment.equipmentName} · ${task.plan.planName} · 计划日期 ${task.plannedDate}`"
+        spaced
+      >
+        <template #aside>
+          <span class="pmis-task-execution__progress">
+            {{ completedCount }} / {{ form.model.results.length }}
+          </span>
+        </template>
+      </ArtEntitySummary>
 
       <ArtForm
         ref="formRef"
@@ -131,7 +130,6 @@
   import type { ArtDialogExpose } from '@/components/core/dialogs/art-dialog/types'
   import ArtForm, { type FormItem } from '@/components/core/forms/art-form/index.vue'
   import ArtUploadImage from '@/components/core/forms/art-upload-image/index.vue'
-  import ArtSvgIcon from '@/components/core/base/art-svg-icon/index.vue'
   import { completePmisTask, type PmisTask, type PmisTaskExecutionResultInput } from '@pmis/api'
   import { pmisKindConfig } from './business-config'
 
@@ -340,53 +338,6 @@
   .pmis-task-execution {
     min-width: 0;
 
-    &__context {
-      display: grid;
-      grid-template-columns: 46px minmax(0, 1fr) auto;
-      gap: var(--art-space-3);
-      align-items: center;
-      padding: var(--art-space-3) var(--art-space-4);
-      margin-bottom: var(--art-space-4);
-      background: color-mix(in srgb, var(--theme-color) 7%, var(--default-box-color));
-      border-left: 3px solid var(--theme-color);
-      border-radius: var(--el-border-radius-base);
-
-      > span:first-child {
-        display: grid;
-        place-items: center;
-        width: 46px;
-        height: 46px;
-        font-size: 22px;
-        color: var(--theme-color);
-        background: var(--default-box-color);
-        border-radius: var(--el-border-radius-base);
-      }
-
-      small,
-      strong,
-      p {
-        display: block;
-        margin: 0;
-      }
-
-      small {
-        font-size: 10px;
-        color: var(--theme-color);
-        letter-spacing: 0.08em;
-      }
-
-      strong {
-        margin-top: 2px;
-        font-family: var(--art-font-family-mono, Consolas, monospace);
-      }
-
-      p {
-        margin-top: 3px;
-        font-size: 12px;
-        color: var(--el-text-color-secondary);
-      }
-    }
-
     &__progress {
       padding: 6px 10px;
       font-variant-numeric: tabular-nums;
@@ -509,15 +460,6 @@
 
   @media (width <= 760px) {
     .pmis-task-execution {
-      &__context {
-        grid-template-columns: 42px minmax(0, 1fr);
-      }
-
-      &__progress {
-        grid-column: 1 / -1;
-        justify-self: start;
-      }
-
       &__items header,
       &__item-fields,
       &__album {

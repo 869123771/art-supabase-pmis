@@ -1,12 +1,11 @@
 <template>
   <ArtDialog ref="dialogRef" size="md">
     <div class="pmis-task-editor">
-      <div class="pmis-task-editor__lead"
-        ><ArtSvgIcon :icon="config.icon" /><div
-          ><small>MANUAL TASK</small><strong>{{ kindLabel }}临时任务</strong
-          ><p>临时任务使用统一方案项目和执行标准，保存后进入同一任务闭环。</p></div
-        ></div
-      >
+      <ArtEntitySummary spaced>
+        <template #icon><ArtSvgIcon :icon="config.icon" /></template>
+        <small>MANUAL TASK</small><strong>{{ kindLabel }}临时任务</strong
+        ><p>临时任务使用统一方案项目和执行标准，保存后进入同一任务闭环。</p>
+      </ArtEntitySummary>
       <ArtForm
         ref="formRef"
         v-model="form"
@@ -182,41 +181,4 @@
   }
   defineExpose({ handleOpen })
 </script>
-<style scoped lang="scss">
-  .pmis-task-editor__lead {
-    display: grid;
-    grid-template-columns: 46px minmax(0, 1fr);
-    gap: 13px;
-    align-items: center;
-    padding: 14px 16px;
-    margin-bottom: 18px;
-    background: color-mix(in srgb, var(--theme-color) 7%, var(--default-box-color));
-    border-left: 3px solid var(--theme-color);
-    border-radius: var(--el-border-radius-base);
-  }
-
-  .pmis-task-editor__lead > :first-child {
-    width: 24px;
-    height: 24px;
-    margin: auto;
-    color: var(--theme-color);
-  }
-
-  .pmis-task-editor__lead small,
-  .pmis-task-editor__lead strong,
-  .pmis-task-editor__lead p {
-    display: block;
-    margin: 0;
-  }
-
-  .pmis-task-editor__lead small {
-    font-size: 10px;
-    color: var(--theme-color);
-    letter-spacing: 0.08em;
-  }
-
-  .pmis-task-editor__lead p {
-    margin-top: 3px;
-    color: var(--el-text-color-secondary);
-  }
-</style>
+<style scoped lang="scss"></style>

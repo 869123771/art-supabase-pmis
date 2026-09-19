@@ -1,12 +1,11 @@
 <template>
   <ArtDialog ref="dialogRef" size="xl">
     <div class="pmis-repair-dialog">
-      <div class="pmis-repair-dialog__lead"
-        ><ArtSvgIcon icon="ri:tools-line" /><div
-          ><small>REPAIR WORK ORDER</small><strong>{{ form.faultSymptom || '新维修工单' }}</strong
-          ><p>记录报修现象、责任人员、维修分析与现场图片，完成后进入确认闭环。</p></div
-        ></div
-      >
+      <ArtEntitySummary spaced>
+        <template #icon><ArtSvgIcon icon="ri:tools-line" /></template>
+        <small>REPAIR WORK ORDER</small><strong>{{ form.faultSymptom || '新维修工单' }}</strong
+        ><p>记录报修现象、责任人员、维修分析与现场图片，完成后进入确认闭环。</p>
+      </ArtEntitySummary>
       <ArtForm
         ref="formRef"
         v-model="form"
@@ -244,41 +243,4 @@
   }
   defineExpose({ handleOpen })
 </script>
-<style scoped lang="scss">
-  .pmis-repair-dialog__lead {
-    display: grid;
-    grid-template-columns: 46px minmax(0, 1fr);
-    gap: 13px;
-    align-items: center;
-    padding: 14px 16px;
-    margin-bottom: 18px;
-    background: color-mix(in srgb, var(--theme-color) 7%, var(--default-box-color));
-    border-left: 3px solid var(--theme-color);
-    border-radius: var(--el-border-radius-base);
-  }
-
-  .pmis-repair-dialog__lead > :first-child {
-    width: 24px;
-    height: 24px;
-    margin: auto;
-    color: var(--theme-color);
-  }
-
-  .pmis-repair-dialog__lead small,
-  .pmis-repair-dialog__lead strong,
-  .pmis-repair-dialog__lead p {
-    display: block;
-    margin: 0;
-  }
-
-  .pmis-repair-dialog__lead small {
-    font-size: 10px;
-    color: var(--theme-color);
-    letter-spacing: 0.08em;
-  }
-
-  .pmis-repair-dialog__lead p {
-    margin-top: 3px;
-    color: var(--el-text-color-secondary);
-  }
-</style>
+<style scoped lang="scss"></style>

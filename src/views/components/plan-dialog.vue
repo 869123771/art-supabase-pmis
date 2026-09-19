@@ -1,14 +1,12 @@
 <template>
   <ArtDialog ref="dialogRef" size="xl">
     <div class="pmis-plan-dialog">
-      <div class="pmis-plan-dialog__context">
-        <span><ArtSvgIcon :icon="config.icon" /></span>
-        <div>
-          <small>{{ config.eyebrow }}</small>
-          <strong>{{ form.planName || `新${kindLabel}方案` }}</strong>
-          <p>方案保存后自动生成未来 62 天的设备任务，执行记录继续保留用于追溯。</p>
-        </div>
-      </div>
+      <ArtEntitySummary spaced>
+        <template #icon><ArtSvgIcon :icon="config.icon" /></template>
+        <small>{{ config.eyebrow }}</small>
+        <strong>{{ form.planName || `新${kindLabel}方案` }}</strong>
+        <p>方案保存后自动生成未来 62 天的设备任务，执行记录继续保留用于追溯。</p>
+      </ArtEntitySummary>
 
       <ArtForm
         ref="formRef"
@@ -365,51 +363,5 @@
 <style scoped lang="scss">
   .pmis-plan-dialog {
     min-width: 0;
-
-    &__context {
-      display: grid;
-      grid-template-columns: 46px minmax(0, 1fr);
-      gap: 13px;
-      align-items: center;
-      padding: 13px 15px;
-      margin-bottom: 18px;
-      background: color-mix(in srgb, var(--theme-color) 7%, var(--default-box-color));
-      border-left: 3px solid var(--theme-color);
-      border-radius: var(--el-border-radius-base);
-
-      > span {
-        display: grid;
-        place-items: center;
-        width: 46px;
-        height: 46px;
-        font-size: 22px;
-        color: var(--theme-color);
-        background: var(--default-box-color);
-        border-radius: var(--el-border-radius-base);
-      }
-
-      small,
-      strong,
-      p {
-        display: block;
-        margin: 0;
-      }
-
-      small {
-        font-size: 9px;
-        color: var(--theme-color);
-        letter-spacing: 0.1em;
-      }
-
-      strong {
-        margin-top: 2px;
-      }
-
-      p {
-        margin-top: 3px;
-        font-size: 12px;
-        color: var(--el-text-color-secondary);
-      }
-    }
   }
 </style>

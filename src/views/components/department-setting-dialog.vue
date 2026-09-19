@@ -1,13 +1,13 @@
 <template>
   <ArtDialog ref="dialogRef" size="lg">
     <div class="pmis-setting-dialog">
-      <div class="pmis-setting-dialog__lead">
-        <ArtSvgIcon :icon="kind === 'maintenance' ? 'ri:tools-line' : 'ri:user-settings-line'" />
-        <div
-          ><strong>{{ form.departmentId ? title : '选择业务部门' }}</strong
-          ><small>按部门配置默认人员、确认职责与通知升级规则</small></div
-        >
-      </div>
+      <ArtEntitySummary spaced>
+        <template #icon
+          ><ArtSvgIcon :icon="kind === 'maintenance' ? 'ri:tools-line' : 'ri:user-settings-line'"
+        /></template>
+        <strong>{{ form.departmentId ? title : '选择业务部门' }}</strong
+        ><small>按部门配置默认人员、确认职责与通知升级规则</small>
+      </ArtEntitySummary>
       <ArtForm
         ref="formRef"
         v-model="form"
@@ -298,33 +298,4 @@
   defineExpose({ handleOpen })
 </script>
 
-<style scoped lang="scss">
-  .pmis-setting-dialog__lead {
-    display: grid;
-    grid-template-columns: 44px minmax(0, 1fr);
-    gap: 12px;
-    align-items: center;
-    padding: 14px 16px;
-    margin-bottom: 16px;
-    background: color-mix(in srgb, var(--theme-color) 7%, var(--default-box-color));
-    border-left: 3px solid var(--theme-color);
-    border-radius: var(--el-border-radius-base);
-  }
-
-  .pmis-setting-dialog__lead > :first-child {
-    width: 24px;
-    height: 24px;
-    margin: auto;
-    color: var(--theme-color);
-  }
-
-  .pmis-setting-dialog__lead strong,
-  .pmis-setting-dialog__lead small {
-    display: block;
-  }
-
-  .pmis-setting-dialog__lead small {
-    margin-top: 3px;
-    color: var(--el-text-color-secondary);
-  }
-</style>
+<style scoped lang="scss"></style>
